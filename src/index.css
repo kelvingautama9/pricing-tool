@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+/* 1. Kunci varian dark agar hanya aktif jika class .dark ada pada tag <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Playpen Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Playpen Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* 2. Scroll sentuh mulus TANPA merusak stacking context backdrop-filter di mobile */
+.custom-scrollbar,
+aside,
+header,
+main {
+  -webkit-overflow-scrolling: touch;
+  /* DILARANG memasang transform: translateZ(0) atau perspective di sini */
+}
+
+/* 3. Custom Scrollbar Tipis & Minimalis */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.28);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.48);
+}
+
+/* Tabular numerals helper */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
