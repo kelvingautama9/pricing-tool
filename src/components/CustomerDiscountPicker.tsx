@@ -7,8 +7,15 @@ import {
   Trash2,
   Check,
   X,
+  FileDown,
+  FileUp,
 } from 'lucide-react';
 import { CustomerDiscountItem, CustomerTier } from '../utils/pricingEngine';
+import {
+  triggerHaptic,
+  downloadCustomerTemplateMd,
+  parseCustomerImportFile,
+} from '../utils/hapticsAndImport';
 
 interface CustomerDiscountPickerProps {
   customers: CustomerDiscountItem[];
@@ -17,6 +24,7 @@ interface CustomerDiscountPickerProps {
   onAddCustomer: (item: Omit<CustomerDiscountItem, 'id'>) => void;
   onUpdateCustomer: (item: CustomerDiscountItem) => void;
   onDeleteCustomer: (id: string) => void;
+  onBulkImportCustomers: (items: CustomerDiscountItem[]) => void;
 }
 
 const TIERS: Array<'ALL' | CustomerTier> = ['ALL', 'VIP', 'Priority', 'Reguler'];
@@ -28,10 +36,12 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   onAddCustomer,
   onUpdateCustomer,
   onDeleteCustomer,
+  onBulkImportCustomers,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTier, setActiveTier] = useState<'ALL' | CustomerTier>('ALL');
+  const [importStatusMsg, setImportStatusMsg] = useState<string | null>(null);
 
   // Inline Add / Edit Form State
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -42,6 +52,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   const [formDw, setFormDw] = useState('13');
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileImportRef = useRef<HTMLInputElement>(null);
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
 
@@ -86,6 +97,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   });
 
   const openAddForm = () => {
+    triggerHaptic('light');
     setEditingId(null);
     setFormName('');
     setFormTier('Priority');
@@ -96,6 +108,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
 
   const openEditForm = (cust: CustomerDiscountItem, e: React.MouseEvent) => {
     e.stopPropagation();
+    triggerHaptic('light');
     setEditingId(cust.id);
     setFormName(cust.name);
     setFormTier(cust.tier);
@@ -109,6 +122,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
     const trimmedName = formName.trim();
     if (!trimmedName) return;
 
+    triggerHaptic('success');
     const swVal = parseFloat(formSw.replace(',', '.'));
     const dwVal = parseFloat(formDw.replace(',', '.'));
 
@@ -129,6 +143,26 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
     setEditingId(null);
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = String(ev.target?.result || '');
+      const parsed = parseCustomerImportFile(content);
+      if (parsed.length > 0) {
+        triggerHaptic('success');
+        onBulkImportCustomers(parsed);
+        setImportStatusMsg(`+${parsed.length} customer berhasil diimpor`);
+      } else {
+        setImportStatusMsg('Format file tidak terbaca / kosong');
+      }
+      setTimeout(() => setImportStatusMsg(null), 2800);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const formatSignedPercent = (val: number) => {
     if (val > 0) return `+${val}%`;
     return `${val}%`;
@@ -136,7 +170,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
 
   return (
     <div ref={containerRef} className="relative">
-      {/* Split Action Trigger Button (Inspired by reference image, with crisp rounded-md corners) */}
+      {/* Split Action Trigger Button */}
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -145,15 +179,18 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
             openAddForm();
           }}
           title="Tambah Acuan Diskon Customer Baru"
-          className="h-9 w-9 flex items-center justify-center rounded-md bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-[#C65D3B] hover:text-white border border-black/10 dark:border-white/10 text-neutral-600 dark:text-neutral-300 transition-colors duration-150 cursor-pointer shrink-0"
+          className="h-9 w-9 flex items-center justify-center rounded-md bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-[#C65D3B] hover:text-white border border-black/10 dark:border-white/10 text-neutral-600 dark:text-neutral-300 transition-colors duration-150 active:scale-[0.97] cursor-pointer shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
 
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className={`h-9 px-3 flex items-center gap-2 rounded-md border text-xs font-medium transition-colors duration-150 cursor-pointer select-none whitespace-nowrap ${
+          onClick={() => {
+            triggerHaptic('light');
+            setIsOpen(!isOpen);
+          }}
+          className={`h-9 px-3 flex items-center gap-2 rounded-md border text-xs font-medium transition-colors duration-150 active:scale-[0.98] cursor-pointer select-none whitespace-nowrap ${
             selectedCustomer
               ? 'bg-[#C65D3B]/10 border-[#C65D3B]/40 text-[#C65D3B] font-semibold'
               : 'bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 border-black/10 dark:border-white/10 text-[#1C1B1A] dark:text-[#F2EFE9]'
@@ -166,7 +203,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
         </button>
       </div>
 
-      {/* Floating Popover Card (Strictly bounded width & height to prevent overlap) */}
+      {/* Floating Popover Card */}
       {isOpen && (
         <div className="absolute right-0 mt-1.5 w-80 sm:w-96 z-50 rounded-md p-2.5 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/15 dark:border-white/15 shadow-xl text-xs text-[#1C1B1A] dark:text-[#F2EFE9]">
           {/* Top Search & Add Bar */}
@@ -179,7 +216,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari nama PT / customer..."
-                className="w-full pl-8 pr-6 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-1 focus:outline-[#C65D3B]"
+                className="w-full pl-8 pr-6 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
               />
               {searchQuery && (
                 <button
@@ -208,7 +245,10 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
               <button
                 key={tier}
                 type="button"
-                onClick={() => setActiveTier(tier)}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setActiveTier(tier);
+                }}
                 className={`flex-1 py-1 px-1.5 rounded-xs text-[10.5px] font-medium transition-colors cursor-pointer ${
                   activeTier === tier
                     ? 'bg-[#C65D3B] text-white font-semibold'
@@ -242,8 +282,8 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                 required
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                placeholder="Contoh: PT Gama Inti Wahana"
-                className="w-full px-2 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B]"
+                placeholder="Contoh: PT Vinns Carton"
+                className="w-full px-2 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
               />
 
               <div className="grid grid-cols-3 gap-1.5">
@@ -256,7 +296,10 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                       <button
                         key={t}
                         type="button"
-                        onClick={() => setFormTier(t)}
+                        onClick={() => {
+                          triggerHaptic('light');
+                          setFormTier(t);
+                        }}
                         className={`flex-1 py-1 text-[9.5px] font-medium cursor-pointer ${
                           formTier === t
                             ? 'bg-[#C65D3B] text-white font-semibold'
@@ -279,7 +322,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                     value={formSw}
                     onChange={(e) => setFormSw(e.target.value)}
                     placeholder="+9 / -5"
-                    className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B]"
+                    className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
                   />
                 </div>
 
@@ -293,7 +336,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                     value={formDw}
                     onChange={(e) => setFormDw(e.target.value)}
                     placeholder="+13"
-                    className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B]"
+                    className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
                   />
                 </div>
               </div>
@@ -316,8 +359,8 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
             </form>
           )}
 
-          {/* Scrollable Customer List (max-h-56 overscroll-contain) */}
-          <div className="max-h-56 overflow-y-auto overscroll-contain custom-scrollbar space-y-1 pr-0.5">
+          {/* Scrollable Customer List */}
+          <div className="max-h-52 overflow-y-auto overscroll-contain custom-scrollbar space-y-1 pr-0.5">
             {filteredCustomers.length === 0 ? (
               <div className="py-4 text-center text-[11px] text-neutral-400">
                 Customer tidak ditemukan.
@@ -329,6 +372,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                   <div
                     key={cust.id}
                     onClick={() => {
+                      triggerHaptic('medium');
                       onSelectCustomer(cust);
                       setIsOpen(false);
                     }}
@@ -358,7 +402,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                           SW: {formatSignedPercent(cust.swMarginPercent)}
                         </span>
                         <span className="text-neutral-300 dark:text-neutral-600">|</span>
-                        <span className="text-neutral-500 dark:text-neutral-400">
+                        <span className="text-neutral-400 dark:text-neutral-500">
                           DW: {formatSignedPercent(cust.dwMarginPercent)}
                         </span>
                       </div>
@@ -378,6 +422,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                         title="Hapus Customer"
                         onClick={(e) => {
                           e.stopPropagation();
+                          triggerHaptic('light');
                           onDeleteCustomer(cust.id);
                         }}
                         className="p-1 text-neutral-400 hover:text-rose-600 rounded-xs cursor-pointer"
@@ -392,6 +437,43 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                 );
               })
             )}
+          </div>
+
+          {/* Bottom Utility Bar: Download Template .MD & Import File (.MD / .CSV / .JSON) */}
+          <div className="mt-2 pt-2 border-t border-black/8 dark:border-white/10 space-y-1.5">
+            {importStatusMsg && (
+              <div className="text-[10.5px] font-mono text-center text-emerald-600 dark:text-emerald-400">
+                {importStatusMsg}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={downloadCustomerTemplateMd}
+                className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[10.5px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+              >
+                <FileDown className="w-3 h-3 text-[#C65D3B]" />
+                <span>Template .MD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  fileImportRef.current?.click();
+                }}
+                className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[10.5px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+              >
+                <FileUp className="w-3 h-3 text-[#C65D3B]" />
+                <span>Import .MD / CSV</span>
+              </button>
+              <input
+                ref={fileImportRef}
+                type="file"
+                accept=".md,.markdown,.csv,.txt,.json"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </div>
           </div>
         </div>
       )}

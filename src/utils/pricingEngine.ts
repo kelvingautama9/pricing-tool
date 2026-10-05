@@ -124,45 +124,10 @@ export interface CustomerDiscountItem {
 export const INITIAL_CUSTOMERS: CustomerDiscountItem[] = [
   {
     id: 'cust-1',
-    name: 'PT Gama Inti Wahana',
+    name: 'PT Vinns Carton',
     tier: 'Priority',
     swMarginPercent: 9,
     dwMarginPercent: 13,
-  },
-  {
-    id: 'cust-2',
-    name: 'PT Artha Kemindo',
-    tier: 'VIP',
-    swMarginPercent: -3.5,
-    dwMarginPercent: 5,
-  },
-  {
-    id: 'cust-3',
-    name: 'PT Sinar Pangan Nusantara',
-    tier: 'VIP',
-    swMarginPercent: -5,
-    dwMarginPercent: 2.5,
-  },
-  {
-    id: 'cust-4',
-    name: 'CV Mitra Packindo',
-    tier: 'Reguler',
-    swMarginPercent: 7.5,
-    dwMarginPercent: 11,
-  },
-  {
-    id: 'cust-5',
-    name: 'PT Sentosa Box Mandiri',
-    tier: 'Priority',
-    swMarginPercent: 5,
-    dwMarginPercent: 8.5,
-  },
-  {
-    id: 'cust-6',
-    name: 'PT Indokarton Kreasi',
-    tier: 'Reguler',
-    swMarginPercent: 10,
-    dwMarginPercent: 14,
   },
 ];
 

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check, AlertCircle } from 'lucide-react';
+import { triggerHaptic } from '../utils/hapticsAndImport';
 
 export interface DropdownOptionItem {
   id: string;
@@ -96,7 +97,10 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
       {/* Trigger Button — Clean Minimalist (Only ID + Tag, no duplicate description) */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          triggerHaptic('light');
+          setIsOpen(!isOpen);
+        }}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-[#FFFFFF] dark:bg-[#161311] hover:bg-neutral-50 dark:hover:bg-[#1e1b18] border text-left transition-all duration-150 ease-out active:scale-[0.99] cursor-pointer select-none ${
           isOpen
             ? 'border-[#C65D3B] ring-1 ring-[#C65D3B]/30'
@@ -187,6 +191,7 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => {
+                    triggerHaptic('medium');
                     onChange(item.id);
                     setIsOpen(false);
                   }}

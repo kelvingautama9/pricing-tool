@@ -27,6 +27,7 @@ import {
   HistoryFolder,
 } from './components/SidebarHistory';
 import { MasterTableAndTests } from './components/MasterTableAndTests';
+import { triggerHaptic } from './utils/hapticsAndImport';
 import {
   Menu,
   Copy,
@@ -42,7 +43,7 @@ import {
 
 const STORAGE_KEY_ITEMS = 'prokemas_pricing_history_items_v1';
 const STORAGE_KEY_FOLDERS = 'prokemas_pricing_history_folders_v1';
-const STORAGE_KEY_CUSTOMERS = 'prokemas_pricing_customers_v1';
+const STORAGE_KEY_CUSTOMERS = 'mypak_pricing_customers_v2';
 const STORAGE_KEY_THEME = 'prokemas_pricing_theme_v1';
 
 const DEFAULT_FOLDERS: HistoryFolder[] = [
@@ -330,6 +331,27 @@ export default function App() {
     }
   };
 
+  const handleBulkImportCustomers = (importedList: CustomerDiscountItem[]) => {
+    setCustomers((prev) => {
+      const mapByName = new Map<string, CustomerDiscountItem>();
+      prev.forEach((c) => mapByName.set(c.name.toLowerCase(), c));
+      importedList.forEach((imp) => {
+        const existing = mapByName.get(imp.name.toLowerCase());
+        if (existing) {
+          mapByName.set(imp.name.toLowerCase(), {
+            ...existing,
+            tier: imp.tier,
+            swMarginPercent: imp.swMarginPercent,
+            dwMarginPercent: imp.dwMarginPercent,
+          });
+        } else {
+          mapByName.set(imp.name.toLowerCase(), imp);
+        }
+      });
+      return Array.from(mapByName.values());
+    });
+  };
+
   const handleResetNewCalculation = () => {
     setActiveHistoryId(null);
     setSelectedCustomerId(null);
@@ -359,6 +381,7 @@ export default function App() {
 
   const handleSaveToHistory = () => {
     if (!calculationResult.success) return;
+    triggerHaptic('success');
 
     const defaultLabel =
       quoteTitle.trim() ||
@@ -383,6 +406,7 @@ export default function App() {
 
   const handleCopyWhatsApp = async () => {
     if (!calculationResult.success || !whatsAppPreviewText) return;
+    triggerHaptic('success');
     try {
       await navigator.clipboard.writeText(whatsAppPreviewText);
       setCopiedWa(true);
@@ -400,12 +424,14 @@ export default function App() {
   };
 
   const handleSwapTopBottom = () => {
+    triggerHaptic('medium');
     const temp = topLayer;
     setTopLayer(botLayer);
     setBotLayer(temp);
   };
 
   const handleToggleSignMargin = () => {
+    triggerHaptic('light');
     const num = parseFloat(marginStr.replace(',', '.'));
     if (!Number.isFinite(num) || num === 0) {
       setMarginStr(marginStr.startsWith('-') ? '5' : '-5');
@@ -507,6 +533,7 @@ export default function App() {
         onAddCustomer={handleAddCustomer}
         onUpdateCustomer={handleUpdateCustomer}
         onDeleteCustomer={handleDeleteCustomer}
+        onBulkImportCustomers={handleBulkImportCustomers}
         onExportJson={handleExportJson}
         onImportJson={(importedItems, importedFolders, importedCustomers) => {
           setHistoryItems(importedItems);
@@ -707,7 +734,10 @@ export default function App() {
                               <button
                                 key={fOpt.id}
                                 type="button"
-                                onClick={() => setFlute(fOpt.id)}
+                                onClick={() => {
+                                  triggerHaptic('medium');
+                                  setFlute(fOpt.id);
+                                }}
                                 className={`py-2 px-3 rounded-md font-mono text-xs font-semibold border transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 ${
                                   isSelected
                                     ? 'bg-[#C65D3B] border-[#C65D3B] text-white'
@@ -791,6 +821,7 @@ export default function App() {
                             onAddCustomer={handleAddCustomer}
                             onUpdateCustomer={handleUpdateCustomer}
                             onDeleteCustomer={handleDeleteCustomer}
+                            onBulkImportCustomers={handleBulkImportCustomers}
                           />
                         </div>
 
@@ -1029,7 +1060,10 @@ export default function App() {
                         <div className="pt-1 border-t border-black/6 dark:border-white/8">
                           <button
                             type="button"
-                            onClick={() => setShowOrderBreakdown(!showOrderBreakdown)}
+                            onClick={() => {
+                              triggerHaptic('light');
+                              setShowOrderBreakdown(!showOrderBreakdown);
+                            }}
                             className="w-full flex items-center justify-between py-1.5 text-left text-xs font-display font-semibold text-neutral-600 dark:text-neutral-300 hover:text-[#1C1B1A] dark:hover:text-white transition-colors cursor-pointer"
                           >
                             <span>Rincian Order of Operations (Tahap 1–6)</span>
@@ -1052,7 +1086,10 @@ export default function App() {
                         <div className="pt-1 border-t border-black/6 dark:border-white/8">
                           <button
                             type="button"
-                            onClick={() => setShowWhatsAppSection(!showWhatsAppSection)}
+                            onClick={() => {
+                              triggerHaptic('light');
+                              setShowWhatsAppSection(!showWhatsAppSection);
+                            }}
                             className="w-full flex items-center justify-between py-1.5 text-left text-xs font-display font-semibold text-neutral-600 dark:text-neutral-300 hover:text-[#1C1B1A] dark:hover:text-white transition-colors cursor-pointer"
                           >
                             <span>Format Teks WhatsApp</span>

@@ -20,6 +20,8 @@ import {
   Check,
   Users,
   History,
+  FileDown,
+  FileUp,
 } from 'lucide-react';
 import {
   PricingInput,
@@ -27,6 +29,11 @@ import {
   CustomerDiscountItem,
   CustomerTier,
 } from '../utils/pricingEngine';
+import {
+  triggerHaptic,
+  downloadCustomerTemplateMd,
+  parseCustomerImportFile,
+} from '../utils/hapticsAndImport';
 
 export interface CalculationHistoryItem {
   id: string;
@@ -67,6 +74,7 @@ interface SidebarHistoryProps {
   onAddCustomer: (item: Omit<CustomerDiscountItem, 'id'>) => void;
   onUpdateCustomer: (item: CustomerDiscountItem) => void;
   onDeleteCustomer: (id: string) => void;
+  onBulkImportCustomers: (items: CustomerDiscountItem[]) => void;
   // Import/Export & Theme
   onExportJson: () => void;
   onImportJson: (
@@ -99,6 +107,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   onAddCustomer,
   onUpdateCustomer,
   onDeleteCustomer,
+  onBulkImportCustomers,
   onExportJson,
   onImportJson,
   isDarkMode,
@@ -125,8 +134,30 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   const [custTier, setCustTier] = useState<CustomerTier>('Priority');
   const [custSw, setCustSw] = useState('9');
   const [custDw, setCustDw] = useState('13');
+  const [custImportMsg, setCustImportMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const custMdInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCustMdUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = String(ev.target?.result || '');
+      const parsed = parseCustomerImportFile(content);
+      if (parsed.length > 0) {
+        triggerHaptic('success');
+        onBulkImportCustomers(parsed);
+        setCustImportMsg(`+${parsed.length} customer diimpor`);
+      } else {
+        setCustImportMsg('Format tidak terbaca');
+      }
+      setTimeout(() => setCustImportMsg(null), 2800);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const toggleFolder = (folderId: string) => {
     setCollapsedFolders((prev) => ({
@@ -661,6 +692,42 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
             ) : (
               /* CUSTOMER DISCOUNT DATABASE VIEW IN SIDEBAR */
               <div className="space-y-2">
+                {/* Quick Import / Download Template .MD Bar */}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={downloadCustomerTemplateMd}
+                    className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 border border-black/6 dark:border-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                  >
+                    <FileDown className="w-3 h-3 text-[#C65D3B]" />
+                    <span>Template .MD</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      custMdInputRef.current?.click();
+                    }}
+                    className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 border border-black/6 dark:border-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                  >
+                    <FileUp className="w-3 h-3 text-[#C65D3B]" />
+                    <span>Import .MD/CSV</span>
+                  </button>
+                  <input
+                    ref={custMdInputRef}
+                    type="file"
+                    accept=".md,.markdown,.csv,.txt,.json"
+                    onChange={handleCustMdUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                {custImportMsg && (
+                  <div className="text-[10px] font-mono text-center text-emerald-600 dark:text-emerald-400">
+                    {custImportMsg}
+                  </div>
+                )}
+
                 {/* Tier Filter Tabs */}
                 <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 gap-0.5">
                   {(['ALL', 'VIP', 'Priority', 'Reguler'] as const).map((t) => (
