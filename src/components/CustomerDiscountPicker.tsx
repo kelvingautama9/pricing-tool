@@ -9,12 +9,15 @@ import {
   X,
   FileDown,
   FileUp,
+  HelpCircle,
 } from 'lucide-react';
 import { CustomerDiscountItem, CustomerTier } from '../utils/pricingEngine';
 import {
   triggerHaptic,
   downloadCustomerTemplateMd,
+  downloadCustomerTemplateExcel,
   parseCustomerImportFile,
+  parseCustomerExcelBuffer,
 } from '../utils/hapticsAndImport';
 
 interface CustomerDiscountPickerProps {
@@ -27,7 +30,7 @@ interface CustomerDiscountPickerProps {
   onBulkImportCustomers: (items: CustomerDiscountItem[]) => void;
 }
 
-const TIERS: Array<'ALL' | CustomerTier> = ['ALL', 'VIP', 'Priority', 'Reguler'];
+const TIERS: Array<'ALL' | CustomerTier> = ['ALL', 'Tier 1', 'Tier 2', 'Tier 3'];
 
 export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   customers,
@@ -42,12 +45,13 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTier, setActiveTier] = useState<'ALL' | CustomerTier>('ALL');
   const [importStatusMsg, setImportStatusMsg] = useState<string | null>(null);
+  const [showFormatGuide, setShowFormatGuide] = useState(false);
 
   // Inline Add / Edit Form State
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
-  const [formTier, setFormTier] = useState<CustomerTier>('Priority');
+  const [formTier, setFormTier] = useState<CustomerTier>('Tier 1');
   const [formSw, setFormSw] = useState('9');
   const [formDw, setFormDw] = useState('13');
 
@@ -67,6 +71,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
       ) {
         setIsOpen(false);
         setIsFormOpen(false);
+        setShowFormatGuide(false);
       }
     };
 
@@ -74,6 +79,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
       if (e.key === 'Escape') {
         setIsOpen(false);
         setIsFormOpen(false);
+        setShowFormatGuide(false);
       }
     };
 
@@ -100,10 +106,11 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
     triggerHaptic('light');
     setEditingId(null);
     setFormName('');
-    setFormTier('Priority');
+    setFormTier('Tier 1');
     setFormSw('0');
     setFormDw('0');
     setIsFormOpen(true);
+    setShowFormatGuide(false);
   };
 
   const openEditForm = (cust: CustomerDiscountItem, e: React.MouseEvent) => {
@@ -115,6 +122,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
     setFormSw(String(cust.swMarginPercent));
     setFormDw(String(cust.dwMarginPercent));
     setIsFormOpen(true);
+    setShowFormatGuide(false);
   };
 
   const handleSaveForm = (e: React.FormEvent) => {
@@ -146,20 +154,35 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isExcel = ['xls', 'xlsx', 'ods', 'xlsm', 'xlsb'].includes(ext);
+
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const content = String(ev.target?.result || '');
-      const parsed = parseCustomerImportFile(content);
+      let parsed: CustomerDiscountItem[] = [];
+      if (isExcel && ev.target?.result instanceof ArrayBuffer) {
+        parsed = parseCustomerExcelBuffer(ev.target.result);
+      } else {
+        const content = String(ev.target?.result || '');
+        parsed = parseCustomerImportFile(content);
+      }
+
       if (parsed.length > 0) {
         triggerHaptic('success');
         onBulkImportCustomers(parsed);
         setImportStatusMsg(`+${parsed.length} customer berhasil diimpor`);
       } else {
-        setImportStatusMsg('Format file tidak terbaca / kosong');
+        setImportStatusMsg('Format file tidak sesuai / kosong');
       }
-      setTimeout(() => setImportStatusMsg(null), 2800);
+      setTimeout(() => setImportStatusMsg(null), 3000);
     };
-    reader.readAsText(file);
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
     e.target.value = '';
   };
 
@@ -239,7 +262,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
             </button>
           </div>
 
-          {/* Filter by Tier Tabs */}
+          {/* Filter by Tier Tabs (Semua | Tier 1 | Tier 2 | Tier 3) */}
           <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 mb-2 gap-0.5">
             {TIERS.map((tier) => (
               <button
@@ -292,7 +315,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                     Tier
                   </label>
                   <div className="flex rounded-xs overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-[#161311]">
-                    {(['VIP', 'Priority', 'Reguler'] as CustomerTier[]).map((t) => (
+                    {(['Tier 1', 'Tier 2', 'Tier 3'] as CustomerTier[]).map((t) => (
                       <button
                         key={t}
                         type="button"
@@ -306,7 +329,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                             : 'text-neutral-500'
                         }`}
                       >
-                        {t === 'Priority' ? 'Prio' : t === 'Reguler' ? 'Reg' : 'VIP'}
+                        {t.replace('Tier ', 'T')}
                       </button>
                     ))}
                   </div>
@@ -360,7 +383,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
           )}
 
           {/* Scrollable Customer List */}
-          <div className="max-h-52 overflow-y-auto overscroll-contain custom-scrollbar space-y-1 pr-0.5">
+          <div className="max-h-48 overflow-y-auto overscroll-contain custom-scrollbar space-y-1 pr-0.5">
             {filteredCustomers.length === 0 ? (
               <div className="py-4 text-center text-[11px] text-neutral-400">
                 Customer tidak ditemukan.
@@ -439,21 +462,59 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
             )}
           </div>
 
-          {/* Bottom Utility Bar: Download Template .MD & Import File (.MD / .CSV / .JSON) */}
+          {/* Bottom Utility Bar: Format Guide Preview, Template (.MD & .XLSX), and Import */}
           <div className="mt-2 pt-2 border-t border-black/8 dark:border-white/10 space-y-1.5">
             {importStatusMsg && (
               <div className="text-[10.5px] font-mono text-center text-emerald-600 dark:text-emerald-400">
                 {importStatusMsg}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-1.5">
+
+            {/* Toggleable Visual Format Guide for .MD and Excel (Kolom A–E) */}
+            {showFormatGuide && (
+              <div className="p-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 space-y-1.5 text-[10px]">
+                <div className="flex items-center justify-between font-semibold text-[#C65D3B]">
+                  <span>Panduan Format Kolom (.MD & Excel .XLSX)</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowFormatGuide(false)}
+                    className="text-neutral-400 hover:text-neutral-700 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="text-neutral-500 dark:text-neutral-400 leading-relaxed font-mono text-[9.5px]">
+                  • Kolom A: Nomor (1, 2, ...)<br />
+                  • Kolom B: Nama Customer (PT Vinns Carton)<br />
+                  • Kolom C: Tier (Tier 1 / Tier 2 / Tier 3)<br />
+                  • Kolom D: Diskon SW (+9% atau -3.5%)<br />
+                  • Kolom E: Diskon DW (+13%)
+                </div>
+                <pre className="p-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/6 dark:border-white/8 font-mono text-[9px] text-neutral-600 dark:text-neutral-300 overflow-x-auto">
+{`| No | Nama Customer   | Tier   | SW  | DW   |
+| 1  | PT Vinns Carton | Tier 1 | +9% | +13% |`}
+                </pre>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={downloadCustomerTemplateMd}
-                className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[10.5px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                title="Download contoh file template-database-customer.md"
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
               >
                 <FileDown className="w-3 h-3 text-[#C65D3B]" />
-                <span>Template .MD</span>
+                <span>.MD</span>
+              </button>
+              <button
+                type="button"
+                onClick={downloadCustomerTemplateExcel}
+                title="Download contoh file template-database-customer.xlsx (Kolom A-E)"
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+              >
+                <FileDown className="w-3 h-3 text-emerald-600" />
+                <span>.XLSX</span>
               </button>
               <button
                 type="button"
@@ -461,15 +522,31 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                   triggerHaptic('light');
                   fileImportRef.current?.click();
                 }}
-                className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[10.5px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                title="Import dari file Excel (.xls, .xlsx) atau Markdown (.md, .csv)"
+                className="flex-[1.5] flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#C65D3B]/12 hover:bg-[#C65D3B] hover:text-white text-[#C65D3B] text-[10px] font-semibold transition-colors cursor-pointer"
               >
-                <FileUp className="w-3 h-3 text-[#C65D3B]" />
-                <span>Import .MD / CSV</span>
+                <FileUp className="w-3 h-3" />
+                <span>Import File</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setShowFormatGuide(!showFormatGuide);
+                }}
+                title="Lihat contoh struktur kolom file .MD & Excel"
+                className={`p-1.5 rounded-xs border transition-colors cursor-pointer ${
+                  showFormatGuide
+                    ? 'bg-[#C65D3B] text-white border-[#C65D3B]'
+                    : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/6 dark:border-white/8 text-neutral-500'
+                }`}
+              >
+                <HelpCircle className="w-3 h-3" />
               </button>
               <input
                 ref={fileImportRef}
                 type="file"
-                accept=".md,.markdown,.csv,.txt,.json"
+                accept=".xlsx,.xls,.ods,.md,.markdown,.csv,.txt,.json"
                 onChange={handleFileUpload}
                 className="hidden"
               />

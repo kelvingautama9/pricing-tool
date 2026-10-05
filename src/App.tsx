@@ -43,7 +43,7 @@ import {
 
 const STORAGE_KEY_ITEMS = 'prokemas_pricing_history_items_v1';
 const STORAGE_KEY_FOLDERS = 'prokemas_pricing_history_folders_v1';
-const STORAGE_KEY_CUSTOMERS = 'mypak_pricing_customers_v2';
+const STORAGE_KEY_CUSTOMERS = 'mypak_pricing_customers_v3';
 const STORAGE_KEY_THEME = 'prokemas_pricing_theme_v1';
 
 const DEFAULT_FOLDERS: HistoryFolder[] = [

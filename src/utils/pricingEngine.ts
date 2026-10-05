@@ -111,7 +111,7 @@ export const FLUTE_OPTIONS: Array<{
   { id: 'E/F', name: 'E/F', tag: '+2%', supported: true },
 ];
 
-export type CustomerTier = 'VIP' | 'Priority' | 'Reguler';
+export type CustomerTier = 'Tier 1' | 'Tier 2' | 'Tier 3';
 
 export interface CustomerDiscountItem {
   id: string;
@@ -125,7 +125,7 @@ export const INITIAL_CUSTOMERS: CustomerDiscountItem[] = [
   {
     id: 'cust-1',
     name: 'PT Vinns Carton',
-    tier: 'Priority',
+    tier: 'Tier 1',
     swMarginPercent: 9,
     dwMarginPercent: 13,
   },

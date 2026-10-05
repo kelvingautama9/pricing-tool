@@ -22,6 +22,7 @@ import {
   History,
   FileDown,
   FileUp,
+  HelpCircle,
 } from 'lucide-react';
 import {
   PricingInput,
@@ -32,7 +33,9 @@ import {
 import {
   triggerHaptic,
   downloadCustomerTemplateMd,
+  downloadCustomerTemplateExcel,
   parseCustomerImportFile,
+  parseCustomerExcelBuffer,
 } from '../utils/hapticsAndImport';
 
 export interface CalculationHistoryItem {
@@ -131,10 +134,11 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   const [isCustFormOpen, setIsCustFormOpen] = useState(false);
   const [editingCustId, setEditingCustId] = useState<string | null>(null);
   const [custName, setCustName] = useState('');
-  const [custTier, setCustTier] = useState<CustomerTier>('Priority');
+  const [custTier, setCustTier] = useState<CustomerTier>('Tier 1');
   const [custSw, setCustSw] = useState('9');
   const [custDw, setCustDw] = useState('13');
   const [custImportMsg, setCustImportMsg] = useState<string | null>(null);
+  const [showSidebarGuide, setShowSidebarGuide] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const custMdInputRef = useRef<HTMLInputElement>(null);
@@ -142,20 +146,34 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   const handleCustMdUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isExcel = ['xls', 'xlsx', 'ods', 'xlsm', 'xlsb'].includes(ext);
+
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const content = String(ev.target?.result || '');
-      const parsed = parseCustomerImportFile(content);
+      let parsed: CustomerDiscountItem[] = [];
+      if (isExcel && ev.target?.result instanceof ArrayBuffer) {
+        parsed = parseCustomerExcelBuffer(ev.target.result);
+      } else {
+        const content = String(ev.target?.result || '');
+        parsed = parseCustomerImportFile(content);
+      }
+
       if (parsed.length > 0) {
         triggerHaptic('success');
         onBulkImportCustomers(parsed);
         setCustImportMsg(`+${parsed.length} customer diimpor`);
       } else {
-        setCustImportMsg('Format tidak terbaca');
+        setCustImportMsg('Format tidak sesuai');
       }
       setTimeout(() => setCustImportMsg(null), 2800);
     };
-    reader.readAsText(file);
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
     e.target.value = '';
   };
 
@@ -208,7 +226,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   const openCustCreate = () => {
     setEditingCustId(null);
     setCustName('');
-    setCustTier('Priority');
+    setCustTier('Tier 1');
     setCustSw('0');
     setCustDw('0');
     setIsCustFormOpen(true);
@@ -692,15 +710,25 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
             ) : (
               /* CUSTOMER DISCOUNT DATABASE VIEW IN SIDEBAR */
               <div className="space-y-2">
-                {/* Quick Import / Download Template .MD Bar */}
-                <div className="grid grid-cols-2 gap-1.5">
+                {/* Quick Import / Download Template (.MD & .XLSX) + Format Guide */}
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={downloadCustomerTemplateMd}
-                    className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 border border-black/6 dark:border-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                    title="Download contoh file .MD"
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 border border-black/6 dark:border-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
                   >
                     <FileDown className="w-3 h-3 text-[#C65D3B]" />
-                    <span>Template .MD</span>
+                    <span>.MD</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadCustomerTemplateExcel}
+                    title="Download contoh file Excel .XLSX (Kolom A-E)"
+                    className="flex-1 flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 border border-black/6 dark:border-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                  >
+                    <FileDown className="w-3 h-3 text-emerald-600" />
+                    <span>.XLSX</span>
                   </button>
                   <button
                     type="button"
@@ -708,19 +736,46 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                       triggerHaptic('light');
                       custMdInputRef.current?.click();
                     }}
-                    className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 border border-black/6 dark:border-white/8 text-[10px] font-medium text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                    title="Import dari Excel (.xls, .xlsx) atau Markdown (.md, .csv)"
+                    className="flex-[1.4] flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-xs bg-[#C65D3B]/12 hover:bg-[#C65D3B] hover:text-white text-[#C65D3B] text-[10px] font-semibold transition-colors cursor-pointer"
                   >
-                    <FileUp className="w-3 h-3 text-[#C65D3B]" />
-                    <span>Import .MD/CSV</span>
+                    <FileUp className="w-3 h-3" />
+                    <span>Import</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setShowSidebarGuide(!showSidebarGuide);
+                    }}
+                    title="Panduan format kolom file .MD & Excel"
+                    className={`p-1.5 rounded-xs border transition-colors cursor-pointer ${
+                      showSidebarGuide
+                        ? 'bg-[#C65D3B] text-white border-[#C65D3B]'
+                        : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/6 dark:border-white/8 text-neutral-500'
+                    }`}
+                  >
+                    <HelpCircle className="w-3 h-3" />
                   </button>
                   <input
                     ref={custMdInputRef}
                     type="file"
-                    accept=".md,.markdown,.csv,.txt,.json"
+                    accept=".xlsx,.xls,.ods,.md,.markdown,.csv,.txt,.json"
                     onChange={handleCustMdUpload}
                     className="hidden"
                   />
                 </div>
+
+                {showSidebarGuide && (
+                  <div className="p-2 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 space-y-1 text-[9.5px] font-mono text-neutral-500 dark:text-neutral-400">
+                    <div className="font-sans font-semibold text-[#C65D3B] text-[10px]">
+                      Struktur Kolom Excel / .MD:
+                    </div>
+                    <div>• Kol A: Nomor | Kol B: Nama Customer</div>
+                    <div>• Kol C: Tier (Tier 1 / Tier 2 / Tier 3)</div>
+                    <div>• Kol D: Diskon SW | Kol E: Diskon DW</div>
+                  </div>
+                )}
 
                 {custImportMsg && (
                   <div className="text-[10px] font-mono text-center text-emerald-600 dark:text-emerald-400">
@@ -730,7 +785,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
 
                 {/* Tier Filter Tabs */}
                 <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 gap-0.5">
-                  {(['ALL', 'VIP', 'Priority', 'Reguler'] as const).map((t) => (
+                  {(['ALL', 'Tier 1', 'Tier 2', 'Tier 3'] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
@@ -768,8 +823,8 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                       required
                       value={custName}
                       onChange={(e) => setCustName(e.target.value)}
-                      placeholder="Contoh: PT Gama Inti Wahana"
-                      className="w-full px-2 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B]"
+                      placeholder="Contoh: PT Vinns Carton"
+                      className="w-full px-2 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
                     />
 
                     <div className="grid grid-cols-3 gap-1.5">
@@ -778,7 +833,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           Tier
                         </label>
                         <div className="flex rounded-xs overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-[#161311]">
-                          {(['VIP', 'Priority', 'Reguler'] as CustomerTier[]).map(
+                          {(['Tier 1', 'Tier 2', 'Tier 3'] as CustomerTier[]).map(
                             (tierOpt) => (
                               <button
                                 key={tierOpt}
@@ -790,11 +845,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                                     : 'text-neutral-500'
                                 }`}
                               >
-                                {tierOpt === 'Priority'
-                                  ? 'Prio'
-                                  : tierOpt === 'Reguler'
-                                  ? 'Reg'
-                                  : 'VIP'}
+                                {tierOpt.replace('Tier ', 'T')}
                               </button>
                             )
                           )}
