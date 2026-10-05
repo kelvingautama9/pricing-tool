@@ -69,7 +69,7 @@ export function generateCustomerTemplateMarkdown(): string {
 ## Panduan Format Kolom (Markdown & Excel):
 - **Kolom A (No):** Nomor urut (1, 2, 3, dst.)
 - **Kolom B (Nama Customer):** Nama PT / CV / Klien
-- **Kolom C (Tier):** Pilih **Tier 1**, **Tier 2**, atau **Tier 3**
+- **Kolom C (Tier):** Pilih **Tier 1**, **Tier 2**, **Tier 3**, atau **Tier 4**
 - **Kolom D (Diskon SW):** Persentase Single Wall (contoh: \`+9%\` atau \`-4.5%\`)
 - **Kolom E (Diskon DW):** Persentase Double Wall (contoh: \`+13%\` atau \`+5%\`)
 
@@ -78,6 +78,7 @@ export function generateCustomerTemplateMarkdown(): string {
 | 1 | PT Vinns Carton | Tier 1 | +9% | +13% |
 | 2 | PT Contoh Mitra Kemasan | Tier 2 | -3.5% | +5% |
 | 3 | CV Contoh Box Nusantara | Tier 3 | +7.5% | +11% |
+| 4 | UD Contoh Pack Mandiri | Tier 4 | +10% | +14% |
 `;
 }
 
@@ -106,6 +107,7 @@ export function downloadCustomerTemplateExcel(): void {
     [1, 'PT Vinns Carton', 'Tier 1', '+9%', '+13%'],
     [2, 'PT Contoh Mitra Kemasan', 'Tier 2', '-3.5%', '+5%'],
     [3, 'CV Contoh Box Nusantara', 'Tier 3', '+7.5%', '+11%'],
+    [4, 'UD Contoh Pack Mandiri', 'Tier 4', '+10%', '+14%'],
   ];
 
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
@@ -343,6 +345,7 @@ export function parseCustomerImportFile(rawText: string): CustomerDiscountItem[]
 
 export function normalizeTier(raw: string): CustomerTier {
   const clean = raw.toLowerCase().trim();
+  if (clean.includes('4')) return 'Tier 4';
   if (clean.includes('3') || clean.includes('reg')) return 'Tier 3';
   if (clean.includes('2') || clean.includes('prio')) return 'Tier 2';
   return 'Tier 1';

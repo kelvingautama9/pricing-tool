@@ -30,7 +30,7 @@ interface CustomerDiscountPickerProps {
   onBulkImportCustomers: (items: CustomerDiscountItem[]) => void;
 }
 
-const TIERS: Array<'ALL' | CustomerTier> = ['ALL', 'Tier 1', 'Tier 2', 'Tier 3'];
+const TIERS: Array<'ALL' | CustomerTier> = ['ALL', 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'];
 
 export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   customers,
@@ -262,8 +262,8 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
             </button>
           </div>
 
-          {/* Filter by Tier Tabs (Semua | Tier 1 | Tier 2 | Tier 3) */}
-          <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 mb-2 gap-0.5">
+          {/* Filter by Tier Tabs (Semua | Tier 1 | Tier 2 | Tier 3 | Tier 4) */}
+          <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 mb-2 gap-0.5 overflow-x-auto no-scrollbar">
             {TIERS.map((tier) => (
               <button
                 key={tier}
@@ -272,7 +272,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                   triggerHaptic('light');
                   setActiveTier(tier);
                 }}
-                className={`flex-1 py-1 px-1.5 rounded-xs text-[10.5px] font-medium transition-colors cursor-pointer ${
+                className={`flex-1 py-1 px-1 rounded-xs text-[9.5px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
                   activeTier === tier
                     ? 'bg-[#C65D3B] text-white font-semibold'
                     : 'text-neutral-500 dark:text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white'
@@ -315,7 +315,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                     Tier
                   </label>
                   <div className="flex rounded-xs overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-[#161311]">
-                    {(['Tier 1', 'Tier 2', 'Tier 3'] as CustomerTier[]).map((t) => (
+                    {(['Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'] as CustomerTier[]).map((t) => (
                       <button
                         key={t}
                         type="button"
@@ -323,7 +323,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                           triggerHaptic('light');
                           setFormTier(t);
                         }}
-                        className={`flex-1 py-1 text-[9.5px] font-medium cursor-pointer ${
+                        className={`flex-1 py-1 text-[9px] font-medium cursor-pointer ${
                           formTier === t
                             ? 'bg-[#C65D3B] text-white font-semibold'
                             : 'text-neutral-500'
@@ -382,10 +382,10 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
             </form>
           )}
 
-          {/* Scrollable Customer List */}
-          <div className="max-h-48 overflow-y-auto overscroll-contain custom-scrollbar space-y-1 pr-0.5">
+          {/* Scrollable Customer List (Compact font size) */}
+          <div className="max-h-52 overflow-y-auto overscroll-contain custom-scrollbar space-y-0.5 pr-0.5">
             {filteredCustomers.length === 0 ? (
-              <div className="py-4 text-center text-[11px] text-neutral-400">
+              <div className="py-4 text-center text-[10.5px] text-neutral-400">
                 Customer tidak ditemukan.
               </div>
             ) : (
@@ -399,22 +399,22 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                       onSelectCustomer(cust);
                       setIsOpen(false);
                     }}
-                    className={`group flex items-center justify-between px-2.5 py-2 rounded-xs transition-colors cursor-pointer ${
+                    className={`group flex items-center justify-between px-2 py-1.5 rounded-xs transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-[#C65D3B]/12 border border-[#C65D3B]/35'
                         : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
                     }`}
                   >
                     <div className="min-w-0 flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-xs truncate">
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold text-[10.5px] truncate">
                           {cust.name}
                         </span>
-                        <span className="text-[10px] text-neutral-400 dark:text-neutral-500 shrink-0">
+                        <span className="text-[9px] text-neutral-400 dark:text-neutral-500 shrink-0">
                           · {cust.tier}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2.5 mt-0.5 text-[10.5px] font-mono tabular-nums">
+                      <div className="flex items-center gap-2 mt-0.5 text-[9.5px] font-mono tabular-nums">
                         <span
                           className={
                             cust.swMarginPercent < 0
@@ -431,14 +431,14 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-0.5 shrink-0">
                       <button
                         type="button"
                         title="Edit Customer"
                         onClick={(e) => openEditForm(cust, e)}
                         className="p-1 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white rounded-xs cursor-pointer"
                       >
-                        <Edit3 className="w-3 h-3" />
+                        <Edit3 className="w-2.5 h-2.5" />
                       </button>
                       <button
                         type="button"
@@ -450,10 +450,10 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                         }}
                         className="p-1 text-neutral-400 hover:text-rose-600 rounded-xs cursor-pointer"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-2.5 h-2.5" />
                       </button>
                       {isSelected && (
-                        <Check className="w-3.5 h-3.5 text-[#C65D3B] ml-0.5" />
+                        <Check className="w-3 h-3 text-[#C65D3B] ml-0.5" />
                       )}
                     </div>
                   </div>
@@ -486,7 +486,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                 <div className="text-neutral-500 dark:text-neutral-400 leading-relaxed font-mono text-[9.5px]">
                   • Kolom A: Nomor (1, 2, ...)<br />
                   • Kolom B: Nama Customer (PT Vinns Carton)<br />
-                  • Kolom C: Tier (Tier 1 / Tier 2 / Tier 3)<br />
+                  • Kolom C: Tier (Tier 1 / Tier 2 / Tier 3 / Tier 4)<br />
                   • Kolom D: Diskon SW (+9% atau -3.5%)<br />
                   • Kolom E: Diskon DW (+13%)
                 </div>

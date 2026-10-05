@@ -111,7 +111,7 @@ export const FLUTE_OPTIONS: Array<{
   { id: 'E/F', name: 'E/F', tag: '+2%', supported: true },
 ];
 
-export type CustomerTier = 'Tier 1' | 'Tier 2' | 'Tier 3';
+export type CustomerTier = 'Tier 1' | 'Tier 2' | 'Tier 3' | 'Tier 4';
 
 export interface CustomerDiscountItem {
   id: string;

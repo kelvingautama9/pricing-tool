@@ -772,7 +772,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                       Struktur Kolom Excel / .MD:
                     </div>
                     <div>• Kol A: Nomor | Kol B: Nama Customer</div>
-                    <div>• Kol C: Tier (Tier 1 / Tier 2 / Tier 3)</div>
+                    <div>• Kol C: Tier (Tier 1 / Tier 2 / Tier 3 / Tier 4)</div>
                     <div>• Kol D: Diskon SW | Kol E: Diskon DW</div>
                   </div>
                 )}
@@ -783,14 +783,14 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   </div>
                 )}
 
-                {/* Tier Filter Tabs */}
-                <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 gap-0.5">
-                  {(['ALL', 'Tier 1', 'Tier 2', 'Tier 3'] as const).map((t) => (
+                {/* Tier Filter Tabs (Semua | Tier 1 | Tier 2 | Tier 3 | Tier 4 — Compact & Scrollable) */}
+                <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 gap-0.5 overflow-x-auto no-scrollbar">
+                  {(['ALL', 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'] as const).map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setCustTierFilter(t)}
-                      className={`flex-1 py-1 rounded-xs text-[10px] font-medium transition-colors cursor-pointer ${
+                      className={`flex-1 py-1 px-1 rounded-xs text-[9px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
                         custTierFilter === t
                           ? 'bg-[#C65D3B] text-white font-semibold'
                           : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
@@ -833,13 +833,13 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           Tier
                         </label>
                         <div className="flex rounded-xs overflow-hidden border border-black/10 dark:border-white/10 bg-white dark:bg-[#161311]">
-                          {(['Tier 1', 'Tier 2', 'Tier 3'] as CustomerTier[]).map(
+                          {(['Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'] as CustomerTier[]).map(
                             (tierOpt) => (
                               <button
                                 key={tierOpt}
                                 type="button"
                                 onClick={() => setCustTier(tierOpt)}
-                                className={`flex-1 py-1 text-[9px] font-medium cursor-pointer ${
+                                className={`flex-1 py-1 text-[8.5px] font-medium cursor-pointer ${
                                   custTier === tierOpt
                                     ? 'bg-[#C65D3B] text-white font-semibold'
                                     : 'text-neutral-500'
@@ -897,8 +897,8 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   </form>
                 )}
 
-                {/* Customer Rows */}
-                <div className="space-y-1">
+                {/* Customer Rows (Compact font size for large lists) */}
+                <div className="space-y-0.5">
                   {filteredCustomers.map((cust) => {
                     const isSelected = cust.id === selectedCustomerId;
                     const swSign = cust.swMarginPercent > 0 ? '+' : '';
@@ -911,20 +911,22 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           onSelectCustomer(cust);
                           onCloseMobile();
                         }}
-                        className={`group flex items-center justify-between px-2.5 py-2 rounded-md text-xs transition-colors cursor-pointer ${
+                        className={`group flex items-center justify-between px-2 py-1.5 rounded-xs text-[10.5px] transition-colors cursor-pointer ${
                           isSelected
                             ? 'bg-[#C65D3B]/12 border border-[#C65D3B]/35 font-semibold'
                             : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
                         }`}
                       >
                         <div className="min-w-0 flex-1 pr-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate text-xs">{cust.name}</span>
-                            <span className="text-[10px] text-neutral-400 shrink-0">
+                          <div className="flex items-center gap-1">
+                            <span className="truncate text-[10.5px] font-medium">
+                              {cust.name}
+                            </span>
+                            <span className="text-[9px] text-neutral-400 shrink-0">
                               · {cust.tier}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5 text-[10px] font-mono tabular-nums">
+                          <div className="flex items-center gap-2 mt-0.5 text-[9.5px] font-mono tabular-nums">
                             <span
                               className={
                                 cust.swMarginPercent < 0
@@ -951,7 +953,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                             onClick={(e) => openCustEdit(cust, e)}
                             className="p-1 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white rounded-xs cursor-pointer"
                           >
-                            <Edit3 className="w-3 h-3" />
+                            <Edit3 className="w-2.5 h-2.5" />
                           </button>
                           <button
                             type="button"
@@ -961,7 +963,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                             }}
                             className="p-1 text-neutral-400 hover:text-rose-600 rounded-xs cursor-pointer"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-2.5 h-2.5" />
                           </button>
                         </div>
                       </div>
