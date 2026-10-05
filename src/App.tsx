@@ -969,25 +969,27 @@ export default function App() {
                       <div className="p-5 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 space-y-4">
                         {/* Primary Focal Anchor: Final Rounded Price */}
                         <div>
-                          <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
-                            <span>Harga Bersih Akhir (Per M²)</span>
-                            <span className="font-mono text-[11px]">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                            <span className="font-medium shrink-0">
+                              Harga Bersih Akhir (Per M²)
+                            </span>
+                            <span className="font-mono text-[10.5px] px-2 py-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] text-[#1C1B1A] dark:text-[#F2EFE9] font-semibold shrink-0">
                               {calculationResult.inputSubstanceString} · {calculationResult.input.flute}
                             </span>
                           </div>
 
-                          <div className="mt-1 flex items-baseline justify-between gap-2">
+                          <div className="mt-1.5 flex items-baseline justify-between gap-2">
                             <div className="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-[#C65D3B] tabular-nums">
                               {formatRupiah(calculationResult.hargaBersihPerM2)}
                             </div>
-                            <div className="text-right font-mono text-[10.5px] text-neutral-400 dark:text-neutral-500 tabular-nums">
-                              Mentah: Rp {calculationResult.hargaFinalMentah.toFixed(2)}
+                            <div className="text-right font-mono text-[10.5px] text-neutral-400 dark:text-neutral-500 tabular-nums shrink-0">
+                              Decimal : Rp {calculationResult.hargaFinalMentah.toFixed(2)}
                             </div>
                           </div>
 
                           {/* Small Light-Grey Subtext as requested */}
                           <div className="mt-1.5 text-[10px] text-neutral-400 dark:text-neutral-500 leading-normal">
-                            Pembulatan standar (ROUND 0, desimal ,5 dibulatkan ke atas) · Belum termasuk PPN
+                            Pembulatan Desimal 5 dibulatkan ke atas (exc PPN)
                           </div>
                         </div>
 
@@ -1056,7 +1058,7 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Collapsible 1: Rincian Order of Operations (Tahap 1–6) — Default Hidden */}
+                        {/* Collapsible 1: Rincian Order — Default Hidden */}
                         <div className="pt-1 border-t border-black/6 dark:border-white/8">
                           <button
                             type="button"
@@ -1066,8 +1068,8 @@ export default function App() {
                             }}
                             className="w-full flex items-center justify-between py-1.5 text-left text-xs font-display font-semibold text-neutral-600 dark:text-neutral-300 hover:text-[#1C1B1A] dark:hover:text-white transition-colors cursor-pointer"
                           >
-                            <span>Rincian Order of Operations (Tahap 1–6)</span>
-                            <div className="flex items-center gap-1 text-[10.5px] font-mono text-neutral-400">
+                            <span>Rincian Order</span>
+                            <div className="flex items-center gap-1 text-[10.5px] font-mono text-neutral-400 shrink-0">
                               <span>{showOrderBreakdown ? 'Sembunyikan' : 'Tampilkan'}</span>
                               {showOrderBreakdown ? (
                                 <ChevronUp className="w-3.5 h-3.5" />

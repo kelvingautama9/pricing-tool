@@ -1,207 +1,196 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PricingCalculationResult, formatRupiah } from '../utils/pricingEngine';
 
 interface BreakdownTypewriterProps {
   result: PricingCalculationResult;
 }
 
+interface BreakdownStepItem {
+  id: number;
+  title: string;
+  detail: string;
+  valueText: string;
+  tone?: 'default' | 'amber' | 'emerald' | 'accent';
+}
+
 export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
   result,
 }) => {
-  const [visibleSteps, setVisibleSteps] = useState<number>(0);
+  const steps: BreakdownStepItem[] = useMemo(() => {
+    const marginSign = result.marginPercent > 0 ? '+' : '';
+    const marginNominalSign = result.marginNominalRp >= 0 ? '+' : '-';
 
-  // Fast smooth sequential reveal when opened or when result changes
+    const upgradeDesc =
+      result.upgradeDetails.length === 0
+        ? 'Tidak ada tambahan nominal (+Rp 0)'
+        : result.upgradeDetails
+            .map((up) => `+${formatRupiah(up.amountRp)} (${up.reason})`)
+            .join(' · ') + ` → Virtual Base: ${formatRupiah(result.virtualBase)}`;
+
+    const downgradeDesc =
+      result.downgradeDetails.length === 0
+        ? `Tidak ada penurunan ketebalan (0%) → ${formatRupiah(result.hargaDiskon, true)}`
+        : result.downgradeDetails.map((dw) => dw.reason).join(' · ') +
+          ` → Setelah diskon: ${formatRupiah(result.hargaDiskon, true)}`;
+
+    const multiplierDesc =
+      result.multiplierDetails.length === 0
+        ? 'Tidak ada bahan 275 atau Flute E/F (0%)'
+        : result.multiplierDetails
+            .map((m) => `+${m.percent}% (${m.label})`)
+            .join(' · ');
+
+    return [
+      {
+        id: 1,
+        title: `1. Harga Dasar Acuan (#${result.baseRowNo})`,
+        detail: `${result.mappedReferenceSubstance} (${result.input.flute})${
+          result.autoSwapped ? ' · Auto-Swap' : ''
+        }`,
+        valueText: formatRupiah(result.basePrice),
+        tone: 'default',
+      },
+      {
+        id: 2,
+        title: `2. Penambahan Spek (Virtual Base)`,
+        detail: upgradeDesc,
+        valueText: `+${formatRupiah(result.totalNominalUpgrade)}`,
+        tone: result.totalNominalUpgrade > 0 ? 'amber' : 'default',
+      },
+      {
+        id: 3,
+        title: `3. Diskon Penurunan Spek (-${result.totalDowngradePercent}%)`,
+        detail: downgradeDesc,
+        valueText: `-${formatRupiah(result.discountNominalRp, true)}`,
+        tone: result.totalDowngradePercent > 0 ? 'emerald' : 'default',
+      },
+      {
+        id: 4,
+        title: `4. Diskon / Margin (${marginSign}${result.marginPercent}%)`,
+        detail: `${formatRupiah(result.hargaDiskon, true)} × ${(
+          1 + result.marginDecimal
+        ).toFixed(4)} = ${formatRupiah(result.hargaDenganMargin, true)}`,
+        valueText: `${marginNominalSign}${formatRupiah(
+          Math.abs(result.marginNominalRp),
+          true
+        )}`,
+        tone: result.marginNominalRp < 0 ? 'emerald' : 'default',
+      },
+      {
+        id: 5,
+        title: `5. Multiplier Khusus (+${result.totalMultiplierPercent}%)`,
+        detail: multiplierDesc,
+        valueText: `+${formatRupiah(result.multiplierNominalRp, true)}`,
+        tone: result.totalMultiplierPercent > 0 ? 'accent' : 'default',
+      },
+      {
+        id: 6,
+        title: `6. Pembulatan Akhir`,
+        detail: `Decimal: Rp ${result.hargaFinalMentah.toFixed(2)}`,
+        valueText: formatRupiah(result.hargaBersihPerM2),
+        tone: 'accent',
+      },
+    ];
+  }, [result]);
+
+  // Calculate total characters across all steps for smooth character-by-character AI streaming
+  const stepCharOffsets = useMemo(() => {
+    let runningTotal = 0;
+    return steps.map((s) => {
+      const start = runningTotal;
+      const len = s.title.length + s.detail.length + s.valueText.length;
+      runningTotal += len;
+      return { start, end: runningTotal, len };
+    });
+  }, [steps]);
+
+  const totalChars = stepCharOffsets[stepCharOffsets.length - 1]?.end || 0;
+  const [revealedChars, setRevealedChars] = useState<number>(0);
+
   useEffect(() => {
-    setVisibleSteps(1);
-    const timers: Array<ReturnType<typeof setTimeout>> = [];
-    for (let i = 2; i <= 6; i++) {
-      timers.push(
-        setTimeout(() => {
-          setVisibleSteps(i);
-        }, (i - 1) * 55)
-      );
-    }
-    return () => timers.forEach(clearTimeout);
-  }, [
-    result.inputSubstanceString,
-    result.input.flute,
-    result.marginPercent,
-  ]);
+    setRevealedChars(0);
+    let current = 0;
 
-  const marginSign = result.marginPercent > 0 ? '+' : '';
-  const marginNominalSign = result.marginNominalRp >= 0 ? '+' : '-';
+    // Fast smooth character-by-character AI chatbot streaming effect (~3 chars per 12ms tick at 120Hz)
+    const interval = setInterval(() => {
+      current += 3;
+      if (current >= totalChars) {
+        setRevealedChars(totalChars);
+        clearInterval(interval);
+      } else {
+        setRevealedChars(current);
+      }
+    }, 12);
+
+    return () => clearInterval(interval);
+  }, [totalChars, result.inputSubstanceString, result.input.flute, result.marginPercent]);
+
+  const getValueColor = (tone?: BreakdownStepItem['tone']) => {
+    if (tone === 'amber') return 'text-amber-700 dark:text-amber-400';
+    if (tone === 'emerald') return 'text-emerald-700 dark:text-emerald-400';
+    if (tone === 'accent') return 'text-[#C65D3B] font-bold';
+    return 'text-[#1C1B1A] dark:text-[#F2EFE9]';
+  };
 
   return (
-    <div className="space-y-2 text-xs pt-2 border-t border-black/6 dark:border-white/8">
-      {/* Step 1: Master Base */}
-      {visibleSteps >= 1 && (
-        <div className="flex items-start justify-between gap-2 py-1 border-b border-black/5 dark:border-white/5 transition-opacity duration-150">
-          <div>
-            <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
-              1. Harga Dasar Acuan (#{result.baseRowNo})
-            </span>
-            <span className="block text-[10px] text-neutral-400 dark:text-neutral-500 font-mono">
-              {result.mappedReferenceSubstance} ({result.input.flute})
-              {result.autoSwapped ? ' · Auto-Swap' : ''}
-            </span>
-          </div>
-          <span className="font-mono font-semibold tabular-nums shrink-0">
-            {formatRupiah(result.basePrice)}
-          </span>
-        </div>
-      )}
+    <div className="space-y-1.5 text-xs pt-2 border-t border-black/6 dark:border-white/8">
+      {steps.map((step, idx) => {
+        const { start, end } = stepCharOffsets[idx];
+        if (revealedChars <= start) return null;
 
-      {/* Step 2: Nominal Upgrade & Virtual Base */}
-      {visibleSteps >= 2 && (
-        <div className="py-1 border-b border-black/5 dark:border-white/5 space-y-1 transition-opacity duration-150">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
-                2. Penambahan Spek (Virtual Base)
-              </span>
-              {result.upgradeDetails.length === 0 ? (
-                <span className="block text-[10px] text-neutral-400 dark:text-neutral-500">
-                  Tidak ada tambahan nominal (+Rp 0)
-                </span>
-              ) : (
-                <div className="space-y-0.5 mt-0.5">
-                  {result.upgradeDetails.map((up, i) => (
-                    <span
-                      key={i}
-                      className="block text-[10px] text-amber-700 dark:text-amber-400 font-mono"
-                    >
-                      + {formatRupiah(up.amountRp)} ({up.reason})
-                    </span>
-                  ))}
+        const localProgress = Math.min(revealedChars - start, end - start);
+        const titleLen = step.title.length;
+        const detailLen = step.detail.length;
+
+        const typedTitle = step.title.slice(0, Math.min(localProgress, titleLen));
+        const typedDetail =
+          localProgress > titleLen
+            ? step.detail.slice(0, Math.min(localProgress - titleLen, detailLen))
+            : '';
+        const typedValue =
+          localProgress > titleLen + detailLen
+            ? step.valueText.slice(0, localProgress - titleLen - detailLen)
+            : '';
+
+        const isCurrentlyTypingStep = revealedChars > start && revealedChars < end;
+
+        return (
+          <div
+            key={step.id}
+            className="flex items-start justify-between gap-3 py-1.5 border-b last:border-b-0 border-black/5 dark:border-white/5"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-[11.5px] text-[#1C1B1A] dark:text-[#F2EFE9]">
+                <span>{typedTitle}</span>
+                {isCurrentlyTypingStep && localProgress <= titleLen && (
+                  <span className="inline-block w-[1.5px] h-3 bg-[#C65D3B] ml-0.5 align-middle animate-pulse" />
+                )}
+              </div>
+              {(typedDetail || localProgress > titleLen) && (
+                <div className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono leading-relaxed mt-0.5">
+                  <span>{typedDetail}</span>
+                  {isCurrentlyTypingStep &&
+                    localProgress > titleLen &&
+                    localProgress <= titleLen + detailLen && (
+                      <span className="inline-block w-[1.5px] h-2.5 bg-[#C65D3B] ml-0.5 align-middle animate-pulse" />
+                    )}
                 </div>
               )}
             </div>
-            <span className="font-mono font-semibold text-amber-700 dark:text-amber-400 tabular-nums shrink-0">
-              +{formatRupiah(result.totalNominalUpgrade)}
-            </span>
-          </div>
 
-          <div className="flex items-center justify-between text-[11px] font-mono bg-[#F3F1ED] dark:bg-[#22201E] px-2 py-1 rounded-xs tabular-nums">
-            <span className="font-medium text-neutral-600 dark:text-neutral-300">
-              Virtual Base
-            </span>
-            <span className="font-bold">
-              {formatRupiah(result.virtualBase)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Step 3: Downgrade Discount */}
-      {visibleSteps >= 3 && (
-        <div className="py-1 border-b border-black/5 dark:border-white/5 space-y-1 transition-opacity duration-150">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
-                3. Diskon Penurunan Spek (-{result.totalDowngradePercent}%)
-              </span>
-              {result.downgradeDetails.length === 0 ? (
-                <span className="block text-[10px] text-neutral-400 dark:text-neutral-500">
-                  Tidak ada penurunan ketebalan (0%)
-                </span>
-              ) : (
-                <div className="space-y-0.5 mt-0.5">
-                  {result.downgradeDetails.map((dw, i) => (
-                    <span
-                      key={i}
-                      className="block text-[10px] text-emerald-700 dark:text-emerald-400 font-mono"
-                    >
-                      • {dw.reason}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums shrink-0">
-              -{formatRupiah(result.discountNominalRp, true)}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums">
-            <span>Harga Setelah Diskon</span>
-            <span>{formatRupiah(result.hargaDiskon, true)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Step 4: Margin / Diskon Customer (+ or -) */}
-      {visibleSteps >= 4 && (
-        <div className="py-1 border-b border-black/5 dark:border-white/5 space-y-1 transition-opacity duration-150">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
-                4. Diskon / Margin Customer ({marginSign}
-                {result.marginPercent}%)
-              </span>
-              <span className="block text-[10px] text-neutral-400 dark:text-neutral-500 font-mono">
-                {formatRupiah(result.hargaDiskon, true)} ×{' '}
-                {(1 + result.marginDecimal).toFixed(4)}
-              </span>
-            </div>
-            <span
-              className={`font-mono font-semibold tabular-nums shrink-0 ${
-                result.marginNominalRp < 0
-                  ? 'text-emerald-700 dark:text-emerald-400'
-                  : ''
-              }`}
+            <div
+              className={`font-mono text-[11.5px] font-semibold tabular-nums shrink-0 text-right ${getValueColor(
+                step.tone
+              )}`}
             >
-              {marginNominalSign}
-              {formatRupiah(Math.abs(result.marginNominalRp), true)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums">
-            <span>Harga Dengan Margin/Diskon</span>
-            <span>{formatRupiah(result.hargaDenganMargin, true)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Step 5: Conditional Multipliers (275 & E/F) */}
-      {visibleSteps >= 5 && (
-        <div className="py-1 border-b border-black/5 dark:border-white/5 space-y-1 transition-opacity duration-150">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
-                5. Multiplier Khusus (+{result.totalMultiplierPercent}%)
-              </span>
-              {result.multiplierDetails.length === 0 ? (
-                <span className="block text-[10px] text-neutral-400 dark:text-neutral-500">
-                  Tidak ada bahan 275 atau Flute E/F (0%)
-                </span>
-              ) : (
-                <div className="space-y-0.5 mt-0.5">
-                  {result.multiplierDetails.map((m, i) => (
-                    <span
-                      key={i}
-                      className="block text-[10px] text-[#C65D3B] font-mono"
-                    >
-                      • +{m.percent}% ({m.label})
-                    </span>
-                  ))}
-                </div>
+              <span>{typedValue}</span>
+              {isCurrentlyTypingStep && localProgress > titleLen + detailLen && (
+                <span className="inline-block w-[1.5px] h-3 bg-[#C65D3B] ml-0.5 align-middle animate-pulse" />
               )}
             </div>
-            <span className="font-mono font-semibold tabular-nums shrink-0">
-              +{formatRupiah(result.multiplierNominalRp, true)}
-            </span>
           </div>
-        </div>
-      )}
-
-      {/* Step 6: Finalisasi */}
-      {visibleSteps >= 6 && (
-        <div className="flex items-center justify-between pt-1 text-[11px] font-mono text-neutral-500 dark:text-neutral-400 tabular-nums transition-opacity duration-150">
-          <span>6. Pembulatan Akhir (Mentah Rp {result.hargaFinalMentah.toFixed(2)})</span>
-          <span className="font-bold text-[#C65D3B]">
-            {formatRupiah(result.hargaBersihPerM2)}
-          </span>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 };
