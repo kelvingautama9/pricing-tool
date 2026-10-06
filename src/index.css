@@ -49,3 +49,36 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+/* 4. High-Contrast Text Selection Fix (User Chat Bubble & Global) */
+.user-chat-bubble::selection,
+.user-chat-bubble *::selection {
+  background-color: #fde68a !important;
+  color: #1c1b1a !important;
+}
+
+.user-chat-bubble::-moz-selection,
+.user-chat-bubble *::-moz-selection {
+  background-color: #fde68a !important;
+  color: #1c1b1a !important;
+}
+
+/* 5. Universal Unicode, Multilingual & Mathematical Formula Support */
+.universal-chat-typography {
+  unicode-bidi: plaintext;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.35rem 0;
+  margin: 0.5rem 0 !important;
+}
+
+.katex {
+  font-size: 1.04em !important;
+}
+
+

@@ -10,8 +10,6 @@ import {
   Trash2,
   Edit3,
   FolderPlus,
-  Download,
-  Upload,
   Sun,
   Moon,
   ChevronLeft,
@@ -23,6 +21,7 @@ import {
   FileDown,
   FileUp,
   HelpCircle,
+  MessageSquare,
 } from 'lucide-react';
 import {
   PricingInput,
@@ -37,6 +36,7 @@ import {
   parseCustomerImportFile,
   parseCustomerExcelBuffer,
 } from '../utils/hapticsAndImport';
+import { ChatThread, AIChatFolder } from '../utils/aiEngine';
 
 export interface CalculationHistoryItem {
   id: string;
@@ -55,11 +55,15 @@ export interface HistoryFolder {
   isDefault?: boolean;
 }
 
+export type SidebarTabMode = 'history' | 'customers' | 'ai';
+
 interface SidebarHistoryProps {
   isOpenDesktop: boolean;
   onToggleDesktop: () => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
+  sidebarMode: SidebarTabMode;
+  onChangeSidebarMode: (mode: SidebarTabMode) => void;
   items: CalculationHistoryItem[];
   folders: HistoryFolder[];
   activeItemId: string | null;
@@ -78,13 +82,18 @@ interface SidebarHistoryProps {
   onUpdateCustomer: (item: CustomerDiscountItem) => void;
   onDeleteCustomer: (id: string) => void;
   onBulkImportCustomers: (items: CustomerDiscountItem[]) => void;
-  // Import/Export & Theme
-  onExportJson: () => void;
-  onImportJson: (
-    items: CalculationHistoryItem[],
-    folders: HistoryFolder[],
-    customers?: CustomerDiscountItem[]
-  ) => void;
+  // AI Chat Threads & Folders Props
+  aiThreads: ChatThread[];
+  aiFolders: AIChatFolder[];
+  activeAiThreadId: string;
+  onSelectAiThread: (threadId: string) => void;
+  onNewAiChat: () => void;
+  onRenameAiThread: (id: string, newTitle: string) => void;
+  onTogglePinAiThread: (id: string) => void;
+  onDeleteAiThreads: (ids: string[]) => void;
+  onMoveAiThreadToFolder: (threadId: string, folderId: string) => void;
+  onCreateAiFolder: (name: string) => void;
+  // Theme
   isDarkMode: boolean;
   onToggleTheme: () => void;
 }
@@ -94,6 +103,8 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   onToggleDesktop,
   isOpenMobile,
   onCloseMobile,
+  sidebarMode,
+  onChangeSidebarMode,
   items,
   folders,
   activeItemId,
@@ -111,12 +122,19 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   onUpdateCustomer,
   onDeleteCustomer,
   onBulkImportCustomers,
-  onExportJson,
-  onImportJson,
+  aiThreads,
+  aiFolders,
+  activeAiThreadId,
+  onSelectAiThread,
+  onNewAiChat,
+  onRenameAiThread,
+  onTogglePinAiThread,
+  onDeleteAiThreads,
+  onMoveAiThreadToFolder,
+  onCreateAiFolder,
   isDarkMode,
   onToggleTheme,
 }) => {
-  const [sidebarMode, setSidebarMode] = useState<'history' | 'customers'>('history');
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [batchMode, setBatchMode] = useState(false);
@@ -140,7 +158,17 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   const [custImportMsg, setCustImportMsg] = useState<string | null>(null);
   const [showSidebarGuide, setShowSidebarGuide] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // AI Chat management state inside Sidebar
+  const [aiCollapsedFolders, setAiCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [aiBatchMode, setAiBatchMode] = useState(false);
+  const [selectedAiThreadIds, setSelectedAiThreadIds] = useState<string[]>([]);
+  const [editingAiThreadId, setEditingAiThreadId] = useState<string | null>(null);
+  const [editingAiText, setEditingAiText] = useState('');
+  const [draggedAiThreadId, setDraggedAiThreadId] = useState<string | null>(null);
+  const [dragOverAiFolderId, setDragOverAiFolderId] = useState<string | null>(null);
+  const [isAddingAiFolder, setIsAddingAiFolder] = useState(false);
+  const [newAiFolderName, setNewAiFolderName] = useState('');
+
   const custMdInputRef = useRef<HTMLInputElement>(null);
 
   const handleCustMdUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -263,28 +291,6 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
     setEditingCustId(null);
   };
 
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(String(ev.target?.result));
-        if (Array.isArray(parsed.items)) {
-          onImportJson(
-            parsed.items,
-            Array.isArray(parsed.folders) ? parsed.folders : folders,
-            Array.isArray(parsed.customers) ? parsed.customers : undefined
-          );
-        }
-      } catch {
-        // Ignore invalid JSON file
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
   // Filter items by search query
   const filteredItems = items.filter((item) => {
     if (!searchQuery.trim()) return true;
@@ -304,7 +310,17 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
     return matchTier && matchSearch;
   });
 
+  const filteredAiThreads = aiThreads.filter((t) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      t.title.toLowerCase().includes(q) ||
+      t.messages.some((m) => m.content.toLowerCase().includes(q))
+    );
+  });
+
   const pinnedItems = filteredItems.filter((item) => item.pinned);
+  const pinnedAiThreads = filteredAiThreads.filter((t) => t.pinned);
 
   const formatRelativeTime = (timestamp: number) => {
     const diffMinutes = Math.max(1, Math.floor((Date.now() - timestamp) / 60000));
@@ -314,16 +330,6 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays}h lalu`;
   };
-
-  const storageSizeKb = Math.max(
-    1,
-    Math.round(
-      (JSON.stringify(items).length +
-        JSON.stringify(folders).length +
-        JSON.stringify(customers).length) /
-        1024
-    )
-  );
 
   const renderHistoryRow = (item: CalculationHistoryItem) => {
     const isSelectedActive = activeItemId === item.id;
@@ -347,7 +353,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
             onCloseMobile();
           }
         }}
-        className={`group relative flex items-center justify-between gap-2 px-2.5 py-2 rounded-md text-xs transition-colors duration-150 cursor-pointer select-none ${
+        className={`group relative flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-xs text-[10.5px] transition-colors duration-150 cursor-pointer select-none ${
           isSelectedActive && !batchMode
             ? 'bg-[#C65D3B]/12 border border-[#C65D3B]/35 text-[#1C1B1A] dark:text-[#F2EFE9] font-semibold'
             : isChecked && batchMode
@@ -355,16 +361,16 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
             : 'hover:bg-black/5 dark:hover:bg-white/5 text-neutral-700 dark:text-neutral-300 border border-transparent'
         }`}
       >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {batchMode && (
             <span
-              className={`w-3.5 h-3.5 rounded-xs flex items-center justify-center border shrink-0 ${
+              className={`w-3 h-3 rounded-xs flex items-center justify-center border shrink-0 ${
                 isChecked
                   ? 'bg-[#C65D3B] border-[#C65D3B] text-white'
                   : 'border-neutral-400 dark:border-neutral-600'
               }`}
             >
-              {isChecked && <Check className="w-2.5 h-2.5" />}
+              {isChecked && <Check className="w-2 h-2" />}
             </span>
           )}
 
@@ -378,18 +384,18 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                 onKeyDown={(e) => handleKeyDownRename(e, item.id)}
                 onBlur={() => commitRename(item.id)}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full px-1.5 py-0.5 text-xs rounded-xs bg-white dark:bg-[#22201E] border border-[#C65D3B] text-[#1C1B1A] dark:text-[#F2EFE9] focus:outline-none"
+                className="w-full px-1.5 py-0.5 text-[10.5px] rounded-xs bg-white dark:bg-[#22201E] border border-[#C65D3B] text-[#1C1B1A] dark:text-[#F2EFE9] focus:outline-none"
               />
             ) : (
-              <div className="flex items-center justify-between gap-1.5">
-                <span className="truncate text-xs">{item.title}</span>
-                <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 shrink-0 tabular-nums">
+              <div className="flex items-center justify-between gap-1">
+                <span className="truncate text-[10.5px] leading-tight">{item.title}</span>
+                <span className="text-[9px] font-mono text-neutral-400 dark:text-neutral-500 shrink-0 tabular-nums">
                   {formatRelativeTime(item.createdAt)}
                 </span>
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 text-[10px] text-neutral-400 dark:text-neutral-500 font-mono mt-0.5 tabular-nums">
+            <div className="flex items-center gap-1 text-[9px] text-neutral-400 dark:text-neutral-500 font-mono mt-0.5 tabular-nums">
               <span className="truncate">{item.substanceLabel}</span>
               <span>·</span>
               <span>{item.input.flute}</span>
@@ -408,9 +414,9 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
               type="button"
               title="Ubah Judul"
               onClick={(e) => startEditing(item, e)}
-              className="p-1 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white rounded-xs cursor-pointer"
+              className="p-0.5 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white rounded-xs cursor-pointer"
             >
-              <Edit3 className="w-3 h-3" />
+              <Edit3 className="w-2.5 h-2.5" />
             </button>
             <button
               type="button"
@@ -419,13 +425,13 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                 e.stopPropagation();
                 onTogglePinItem(item.id);
               }}
-              className={`p-1 rounded-xs cursor-pointer ${
+              className={`p-0.5 rounded-xs cursor-pointer ${
                 item.pinned
                   ? 'text-[#C65D3B]'
                   : 'text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white'
               }`}
             >
-              <Pin className="w-3 h-3" />
+              <Pin className="w-2.5 h-2.5" />
             </button>
             <button
               type="button"
@@ -434,10 +440,148 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                 e.stopPropagation();
                 onDeleteItems([item.id]);
               }}
-              className="p-1 text-neutral-400 hover:text-rose-600 rounded-xs cursor-pointer"
+              className="p-0.5 text-neutral-400 hover:text-rose-600 rounded-xs cursor-pointer"
             >
-              <Trash2 className="w-3 h-3" />
+              <Trash2 className="w-2.5 h-2.5" />
             </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAiThreadRow = (thread: ChatThread) => {
+    const isActive = thread.id === activeAiThreadId;
+    const isEditing = editingAiThreadId === thread.id;
+    const isChecked = selectedAiThreadIds.includes(thread.id);
+
+    return (
+      <div
+        key={thread.id}
+        draggable={!isEditing && !aiBatchMode}
+        onDragStart={() => setDraggedAiThreadId(thread.id)}
+        onDragEnd={() => {
+          setDraggedAiThreadId(null);
+          setDragOverAiFolderId(null);
+        }}
+        onClick={() => {
+          if (aiBatchMode) {
+            setSelectedAiThreadIds((prev) =>
+              prev.includes(thread.id)
+                ? prev.filter((id) => id !== thread.id)
+                : [...prev, thread.id]
+            );
+          } else if (!isEditing) {
+            onSelectAiThread(thread.id);
+            onCloseMobile();
+          }
+        }}
+        className={`group flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-xs text-[10.5px] cursor-pointer transition-colors select-none ${
+          isActive && !aiBatchMode
+            ? 'bg-[#C65D3B]/12 border border-[#C65D3B]/35 font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]'
+            : isChecked && aiBatchMode
+            ? 'bg-amber-600/15 border border-amber-600/35 text-[#1C1B1A] dark:text-[#F2EFE9]'
+            : 'hover:bg-black/5 dark:hover:bg-white/5 text-neutral-600 dark:text-neutral-300 border border-transparent'
+        }`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {aiBatchMode && (
+            <span
+              className={`w-3 h-3 rounded-xs flex items-center justify-center border shrink-0 ${
+                isChecked
+                  ? 'bg-[#C65D3B] border-[#C65D3B] text-white'
+                  : 'border-neutral-400'
+              }`}
+            >
+              {isChecked && <Check className="w-2 h-2" />}
+            </span>
+          )}
+
+          {isEditing ? (
+            <input
+              type="text"
+              autoFocus
+              value={editingAiText}
+              onChange={(e) => setEditingAiText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (editingAiText.trim()) {
+                    onRenameAiThread(thread.id, editingAiText.trim());
+                  }
+                  setEditingAiThreadId(null);
+                } else if (e.key === 'Escape') {
+                  setEditingAiThreadId(null);
+                }
+              }}
+              onBlur={() => {
+                if (editingAiText.trim()) {
+                  onRenameAiThread(thread.id, editingAiText.trim());
+                }
+                setEditingAiThreadId(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full px-1 py-0.5 text-[10.5px] rounded-xs bg-white dark:bg-[#161311] border border-[#C65D3B] focus:outline-none"
+            />
+          ) : (
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-1">
+                <span className="truncate text-[10.5px] leading-tight">
+                  {thread.title}
+                </span>
+                <span className="text-[9px] font-mono text-neutral-400 shrink-0 tabular-nums">
+                  {formatRelativeTime(thread.createdAt)}
+                </span>
+              </div>
+              <div className="text-[9px] font-mono text-neutral-400 truncate mt-0.5">
+                {thread.messages.length} pesan
+              </div>
+            </div>
+          )}
+        </div>
+
+        {!aiBatchMode && !isEditing && (
+          <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 bg-[#FFFFFF] dark:bg-[#161311] pl-1 rounded-xs">
+            <button
+              type="button"
+              title="Ubah Judul"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingAiThreadId(thread.id);
+                setEditingAiText(thread.title);
+              }}
+              className="p-0.5 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white cursor-pointer"
+            >
+              <Edit3 className="w-2.5 h-2.5" />
+            </button>
+            <button
+              type="button"
+              title={thread.pinned ? 'Lepas Sematan' : 'Sematkan'}
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePinAiThread(thread.id);
+              }}
+              className={`p-0.5 cursor-pointer ${
+                thread.pinned
+                  ? 'text-[#C65D3B]'
+                  : 'text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white'
+              }`}
+            >
+              <Pin className="w-2.5 h-2.5" />
+            </button>
+            {aiThreads.length > 1 && (
+              <button
+                type="button"
+                title="Hapus Obrolan"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteAiThreads([thread.id]);
+                }}
+                className="p-0.5 text-neutral-400 hover:text-rose-600 cursor-pointer"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -454,7 +598,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
         />
       )}
 
-      {/* Smooth Collapsible Sidebar Wrapper for Desktop + Drawer for Mobile */}
+      {/* Single Unified Sidebar for Desktop + Drawer for Mobile */}
       <aside
         className={`fixed lg:static inset-y-0 left-0 z-50 h-[100dvh] flex flex-col bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border-r border-black/8 dark:border-white/10 transition-all duration-200 ease-out shrink-0 overflow-hidden ${
           isOpenMobile ? 'translate-x-0 w-72' : '-translate-x-full lg:translate-x-0'
@@ -465,38 +609,61 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
         }`}
       >
         <div className="w-72 h-full flex flex-col">
-          {/* 1. Header Island */}
-          <div className="p-3.5 border-b border-black/6 dark:border-white/8">
-            <div className="flex items-center justify-between mb-2.5">
-              {/* Segmented Switcher: Riwayat vs Database Customer */}
-              <div className="flex items-center p-0.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 flex-1 mr-2">
+          {/* 1. Header Island: 3-Part Segmented Switcher (Riwayat | Customer | AI) */}
+          <div className="p-3 border-b border-black/6 dark:border-white/8">
+            <div className="flex items-center justify-between gap-1.5 mb-2.5">
+              {/* 3-Tab Segmented Switcher with Compact Font so all 3 fit cleanly */}
+              <div className="grid grid-cols-3 items-center p-0.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 flex-1 min-w-0 gap-0.5">
                 <button
                   type="button"
-                  onClick={() => setSidebarMode('history')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-xs text-[11px] font-medium transition-colors cursor-pointer ${
+                  onClick={() => {
+                    triggerHaptic('light');
+                    onChangeSidebarMode('history');
+                  }}
+                  className={`flex items-center justify-center gap-1 py-1 px-1 rounded-xs text-[9.5px] font-medium transition-colors cursor-pointer truncate ${
                     sidebarMode === 'history'
                       ? 'bg-white dark:bg-[#161311] text-[#1C1B1A] dark:text-[#F2EFE9] font-semibold shadow-2xs'
                       : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
                   }`}
                 >
-                  <History className="w-3 h-3 text-[#C65D3B]" />
-                  <span>Riwayat</span>
+                  <History className="w-2.5 h-2.5 text-[#C65D3B] shrink-0" />
+                  <span className="truncate">Riwayat</span>
                 </button>
+
                 <button
                   type="button"
-                  onClick={() => setSidebarMode('customers')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-xs text-[11px] font-medium transition-colors cursor-pointer ${
+                  onClick={() => {
+                    triggerHaptic('light');
+                    onChangeSidebarMode('customers');
+                  }}
+                  className={`flex items-center justify-center gap-1 py-1 px-1 rounded-xs text-[9.5px] font-medium transition-colors cursor-pointer truncate ${
                     sidebarMode === 'customers'
                       ? 'bg-white dark:bg-[#161311] text-[#1C1B1A] dark:text-[#F2EFE9] font-semibold shadow-2xs'
                       : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
                   }`}
                 >
-                  <Users className="w-3 h-3 text-[#C65D3B]" />
-                  <span>Customer ({customers.length})</span>
+                  <Users className="w-2.5 h-2.5 text-[#C65D3B] shrink-0" />
+                  <span className="truncate">Customer ({customers.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    onChangeSidebarMode('ai');
+                  }}
+                  className={`flex items-center justify-center gap-1 py-1 px-1 rounded-xs text-[9.5px] font-medium transition-colors cursor-pointer truncate ${
+                    sidebarMode === 'ai'
+                      ? 'bg-white dark:bg-[#161311] text-[#1C1B1A] dark:text-[#F2EFE9] font-semibold shadow-2xs'
+                      : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
+                  }`}
+                >
+                  <MessageSquare className="w-2.5 h-2.5 text-[#C65D3B] shrink-0" />
+                  <span className="truncate">AI</span>
                 </button>
               </div>
 
-              {/* Hide Sidebar Button (Works on both Mobile & Desktop) */}
+              {/* Hide Sidebar Button */}
               <button
                 type="button"
                 onClick={() => {
@@ -506,11 +673,11 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                 title="Sembunyikan Sidebar"
                 className="p-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white transition-colors cursor-pointer shrink-0"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {/* Primary Action Button */}
+            {/* Primary Action Button per Active Mode */}
             {sidebarMode === 'history' ? (
               <button
                 type="button"
@@ -518,23 +685,35 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   onNewCalculation();
                   onCloseMobile();
                 }}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-md bg-[#C65D3B] hover:bg-[#b24f2f] text-white font-semibold text-xs transition-colors duration-150 active:scale-[0.98] cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md bg-[#C65D3B] hover:bg-[#b24f2f] text-white font-semibold text-xs transition-colors duration-150 active:scale-[0.98] cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Kalkulasi Sheet Baru</span>
               </button>
-            ) : (
+            ) : sidebarMode === 'customers' ? (
               <button
                 type="button"
                 onClick={openCustCreate}
-                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-md bg-[#C65D3B] hover:bg-[#b24f2f] text-white font-semibold text-xs transition-colors duration-150 active:scale-[0.98] cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md bg-[#C65D3B] hover:bg-[#b24f2f] text-white font-semibold text-xs transition-colors duration-150 active:scale-[0.98] cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Customer Baru</span>
               </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  onNewAiChat();
+                  onCloseMobile();
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md bg-[#C65D3B] hover:bg-[#b24f2f] text-white font-semibold text-xs transition-colors duration-150 active:scale-[0.98] cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Chat AI Baru</span>
+              </button>
             )}
 
-            {/* 2. Search & Filter Bar */}
+            {/* 2. Search & Batch Filter Bar */}
             <div className="flex items-center gap-1.5 mt-2">
               <div className="relative flex-1">
                 <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -545,7 +724,9 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   placeholder={
                     sidebarMode === 'history'
                       ? 'Cari spek / riwayat...'
-                      : 'Cari nama PT / customer...'
+                      : sidebarMode === 'customers'
+                      ? 'Cari nama PT / customer...'
+                      : 'Cari obrolan AI...'
                   }
                   className="w-full pl-8 pr-6 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/6 dark:border-white/8 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:outline-1 focus:outline-[#C65D3B]"
                 />
@@ -568,32 +749,50 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                     setSelectedIds([]);
                     setBatchMoveMenuOpen(false);
                   }}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[11px] font-medium transition-colors duration-150 cursor-pointer shrink-0 ${
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-md border text-[10.5px] font-medium transition-colors duration-150 cursor-pointer shrink-0 ${
                     batchMode
                       ? 'bg-[#C65D3B]/15 border-[#C65D3B] text-[#C65D3B] font-semibold'
                       : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/6 dark:border-white/8 text-neutral-600 dark:text-neutral-300 hover:text-[#1C1B1A]'
                   }`}
                 >
-                  <CheckSquare className="w-3.5 h-3.5" />
+                  <CheckSquare className="w-3 h-3" />
+                  <span>Pilih</span>
+                </button>
+              )}
+
+              {sidebarMode === 'ai' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiBatchMode(!aiBatchMode);
+                    setSelectedAiThreadIds([]);
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-md border text-[10.5px] font-medium transition-colors duration-150 cursor-pointer shrink-0 ${
+                    aiBatchMode
+                      ? 'bg-[#C65D3B]/15 border-[#C65D3B] text-[#C65D3B] font-semibold'
+                      : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/6 dark:border-white/8 text-neutral-600 dark:text-neutral-300 hover:text-[#1C1B1A]'
+                  }`}
+                >
+                  <CheckSquare className="w-3 h-3" />
                   <span>Pilih</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* 3. Scrollable Content Area (History OR Customer Database) */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2.5">
+          {/* 3. Scrollable Content Area (History OR Customer Database OR AI Chat Threads) */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 space-y-2">
             {sidebarMode === 'history' ? (
               <>
                 {/* Pinned Section */}
                 {pinnedItems.length > 0 && (
                   <div>
-                    <div className="flex items-center justify-between px-1.5 py-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+                    <div className="flex items-center justify-between px-1.5 py-1 text-[10.5px] font-semibold text-neutral-500 dark:text-neutral-400">
                       <div className="flex items-center gap-1.5">
                         <Pin className="w-3 h-3 text-[#C65D3B]" />
                         <span>Disematkan</span>
                       </div>
-                      <span className="font-mono text-[10px] tabular-nums">
+                      <span className="font-mono text-[9.5px] tabular-nums">
                         {pinnedItems.length}
                       </span>
                     </div>
@@ -640,28 +839,28 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleFolder(folder.id)}
-                        className="w-full flex items-center justify-between px-1.5 py-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/5 text-xs font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] cursor-pointer"
+                        className="w-full flex items-center justify-between px-1.5 py-1 rounded-xs hover:bg-black/5 dark:hover:bg-white/5 text-[11px] font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] cursor-pointer"
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <Folder className="w-3.5 h-3.5 text-[#C65D3B] shrink-0" />
+                          <Folder className="w-3 h-3 text-[#C65D3B] shrink-0" />
                           <span className="truncate">{folder.name}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] font-mono text-neutral-400 tabular-nums">
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9.5px] font-mono text-neutral-400 tabular-nums">
                             {folderItems.length}
                           </span>
                           {isCollapsed ? (
-                            <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
+                            <ChevronRight className="w-3 h-3 text-neutral-400" />
                           ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
+                            <ChevronDown className="w-3 h-3 text-neutral-400" />
                           )}
                         </div>
                       </button>
 
                       {!isCollapsed && (
-                        <div className="mt-0.5 space-y-0.5 pl-2.5 border-l border-black/8 dark:border-white/10">
+                        <div className="mt-0.5 space-y-0.5 pl-2 border-l border-black/8 dark:border-white/10">
                           {folderItems.length === 0 ? (
-                            <div className="py-1.5 px-2 text-[10.5px] italic text-neutral-400 dark:text-neutral-500">
+                            <div className="py-1 px-2 text-[9.5px] italic text-neutral-400 dark:text-neutral-500">
                               Kosong
                             </div>
                           ) : (
@@ -686,11 +885,11 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           if (e.key === 'Escape') setIsAddingFolder(false);
                         }}
                         placeholder="Nama kategori..."
-                        className="flex-1 px-2 py-1 text-xs rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-[#C65D3B] text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 focus:outline-none"
+                        className="flex-1 px-2 py-1 text-[10.5px] rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-[#C65D3B] text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 focus:outline-none"
                       />
                       <button
                         type="submit"
-                        className="px-2 py-1 text-[11px] font-semibold bg-[#C65D3B] text-white rounded-md cursor-pointer"
+                        className="px-2 py-1 text-[10px] font-semibold bg-[#C65D3B] text-white rounded-md cursor-pointer"
                       >
                         Simpan
                       </button>
@@ -700,14 +899,14 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsAddingFolder(true)}
-                    className="flex items-center gap-1.5 px-2 py-1 text-xs text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 px-2 py-1 text-[10.5px] text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white transition-colors cursor-pointer"
                   >
-                    <FolderPlus className="w-3.5 h-3.5 text-[#C65D3B]" />
+                    <FolderPlus className="w-3 h-3 text-[#C65D3B]" />
                     <span>+ Kategori Baru</span>
                   </button>
                 )}
               </>
-            ) : (
+            ) : sidebarMode === 'customers' ? (
               /* CUSTOMER DISCOUNT DATABASE VIEW IN SIDEBAR */
               <div className="space-y-2">
                 {/* Quick Import / Download Template (.MD & .XLSX) + Format Guide */}
@@ -783,7 +982,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   </div>
                 )}
 
-                {/* Tier Filter Tabs (Semua | Tier 1 | Tier 2 | Tier 3 | Tier 4 — Compact & Scrollable) */}
+                {/* Tier Filter Tabs */}
                 <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 gap-0.5 overflow-x-auto no-scrollbar">
                   {(['ALL', 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'] as const).map((t) => (
                     <button
@@ -897,7 +1096,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   </form>
                 )}
 
-                {/* Customer Rows (Compact font size for large lists) */}
+                {/* Customer Rows */}
                 <div className="space-y-0.5">
                   {filteredCustomers.map((cust) => {
                     const isSelected = cust.id === selectedCustomerId;
@@ -971,13 +1170,152 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   })}
                 </div>
               </div>
+            ) : (
+              /* AI CHAT THREADS & FOLDERS VIEW IN SIDEBAR */
+              <>
+                {pinnedAiThreads.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between px-1.5 py-1 text-[10.5px] font-semibold text-neutral-500 dark:text-neutral-400">
+                      <div className="flex items-center gap-1.5">
+                        <Pin className="w-3 h-3 text-[#C65D3B]" />
+                        <span>Disematkan</span>
+                      </div>
+                      <span className="font-mono text-[9.5px] tabular-nums">
+                        {pinnedAiThreads.length}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 space-y-0.5 pl-2 border-l border-black/8 dark:border-white/10">
+                      {pinnedAiThreads.map(renderAiThreadRow)}
+                    </div>
+                  </div>
+                )}
+
+                {aiFolders.map((folder) => {
+                  const folderThreads = filteredAiThreads.filter(
+                    (t) => t.folderId === folder.id
+                  );
+                  const isCollapsed = !!aiCollapsedFolders[folder.id];
+                  const isDropTarget = dragOverAiFolderId === folder.id;
+
+                  return (
+                    <div
+                      key={folder.id}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (draggedAiThreadId) {
+                          setDragOverAiFolderId(folder.id);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverAiFolderId === folder.id) {
+                          setDragOverAiFolderId(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedAiThreadId) {
+                          onMoveAiThreadToFolder(draggedAiThreadId, folder.id);
+                          setDraggedAiThreadId(null);
+                          setDragOverAiFolderId(null);
+                        }
+                      }}
+                      className={`rounded-md transition-all duration-150 ${
+                        isDropTarget
+                          ? 'bg-amber-500/20 border-2 border-dashed border-amber-500/80 p-1'
+                          : ''
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAiCollapsedFolders((prev) => ({
+                            ...prev,
+                            [folder.id]: !prev[folder.id],
+                          }))
+                        }
+                        className="w-full flex items-center justify-between px-1.5 py-1 rounded-xs hover:bg-black/5 dark:hover:bg-white/5 text-[11px] font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Folder className="w-3 h-3 text-[#C65D3B] shrink-0" />
+                          <span className="truncate">{folder.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9.5px] font-mono text-neutral-400 tabular-nums">
+                            {folderThreads.length}
+                          </span>
+                          {isCollapsed ? (
+                            <ChevronRight className="w-3 h-3 text-neutral-400" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3 text-neutral-400" />
+                          )}
+                        </div>
+                      </button>
+
+                      {!isCollapsed && (
+                        <div className="mt-0.5 space-y-0.5 pl-2 border-l border-black/8 dark:border-white/10">
+                          {folderThreads.length === 0 ? (
+                            <div className="py-1 px-2 text-[9.5px] italic text-neutral-400 dark:text-neutral-500">
+                              Kosong
+                            </div>
+                          ) : (
+                            folderThreads.map(renderAiThreadRow)
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {isAddingAiFolder ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (newAiFolderName.trim()) {
+                        onCreateAiFolder(newAiFolderName.trim());
+                        setNewAiFolderName('');
+                        setIsAddingAiFolder(false);
+                      }
+                    }}
+                    className="px-1 pt-1"
+                  >
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={newAiFolderName}
+                        onChange={(e) => setNewAiFolderName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') setIsAddingAiFolder(false);
+                        }}
+                        placeholder="Nama folder AI..."
+                        className="flex-1 px-2 py-1 text-[10.5px] rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-[#C65D3B] text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="px-2 py-1 text-[10px] font-semibold bg-[#C65D3B] text-white rounded-md cursor-pointer"
+                      >
+                        Simpan
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingAiFolder(true)}
+                    className="flex items-center gap-1.5 px-2 py-1 text-[10.5px] text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white transition-colors cursor-pointer"
+                  >
+                    <FolderPlus className="w-3 h-3 text-[#C65D3B]" />
+                    <span>+ Folder Baru</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
 
-          {/* 4. Batch Action Dock */}
+          {/* 4. Batch Action Dock for History */}
           {sidebarMode === 'history' && batchMode && selectedIds.length > 0 && (
             <div className="mx-3 mb-2 p-2.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-semibold">
+              <div className="flex items-center justify-between text-[10.5px] font-semibold">
                 <span>{selectedIds.length} spek dipilih</span>
                 <button
                   type="button"
@@ -991,7 +1329,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                 <button
                   type="button"
                   onClick={() => setBatchMoveMenuOpen(!batchMoveMenuOpen)}
-                  className="flex-1 py-1.5 px-2 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-[11px] font-medium hover:bg-neutral-50 cursor-pointer"
+                  className="flex-1 py-1 px-2 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-[10.5px] font-medium hover:bg-neutral-50 cursor-pointer"
                 >
                   Pindah Folder
                 </button>
@@ -1002,7 +1340,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                     setSelectedIds([]);
                     setBatchMode(false);
                   }}
-                  className="py-1.5 px-2.5 rounded-xs bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700 cursor-pointer"
+                  className="py-1 px-2.5 rounded-xs bg-rose-600 text-white text-[10.5px] font-semibold hover:bg-rose-700 cursor-pointer"
                 >
                   Hapus
                 </button>
@@ -1019,7 +1357,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           setSelectedIds([]);
                           setBatchMode(false);
                         }}
-                        className="w-full text-left px-2 py-1.5 text-xs rounded-xs hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer truncate"
+                        className="w-full text-left px-2 py-1.5 text-[10.5px] rounded-xs hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer truncate"
                       >
                         Ke: {f.name}
                       </button>
@@ -1030,14 +1368,34 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
             </div>
           )}
 
+          {/* 4B. Batch Action Dock for AI Threads */}
+          {sidebarMode === 'ai' && aiBatchMode && selectedAiThreadIds.length > 0 && (
+            <div className="mx-3 mb-2 p-2 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 flex items-center justify-between text-[10.5px]">
+              <span className="font-semibold">
+                {selectedAiThreadIds.length} obrolan dipilih
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteAiThreads(selectedAiThreadIds);
+                  setSelectedAiThreadIds([]);
+                  setAiBatchMode(false);
+                }}
+                className="py-1 px-2.5 rounded-xs bg-rose-600 text-white font-semibold hover:bg-rose-700 cursor-pointer"
+              >
+                Hapus
+              </button>
+            </div>
+          )}
+
           {/* 5. Footer Kontrol Sistem */}
-          <div className="p-2.5 m-2.5 rounded-md bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/6 dark:border-white/8 space-y-2 text-xs">
-            <div className="flex items-center justify-between text-[11px]">
+          <div className="p-2.5 m-2.5 rounded-md bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/6 dark:border-white/8 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between text-[10.5px]">
               <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 font-medium">
-                <Layers className="w-3.5 h-3.5 text-[#C65D3B]" />
+                <Layers className="w-3 h-3 text-[#C65D3B]" />
                 <span>Engine Single Wall</span>
               </div>
-              <span className="w-2 h-2 rounded-xs bg-emerald-600" />
+              <span className="w-1.5 h-1.5 rounded-xs bg-emerald-600" />
             </div>
 
             <button
@@ -1047,47 +1405,16 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
             >
               <div className="flex items-center gap-2">
                 {isDarkMode ? (
-                  <Moon className="w-3.5 h-3.5 text-amber-400" />
+                  <Moon className="w-3 h-3 text-amber-400" />
                 ) : (
-                  <Sun className="w-3.5 h-3.5 text-[#C65D3B]" />
+                  <Sun className="w-3 h-3 text-[#C65D3B]" />
                 )}
-                <span className="text-[11px]">Tema Tampilan</span>
+                <span className="text-[10.5px]">Tema Tampilan</span>
               </div>
-              <span className="font-mono text-[10px] text-neutral-400">
+              <span className="font-mono text-[9.5px] text-neutral-400">
                 {isDarkMode ? 'Dark' : 'Light'}
               </span>
             </button>
-
-            <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-black/6 dark:border-white/8">
-              <button
-                type="button"
-                onClick={onExportJson}
-                className="flex items-center justify-center gap-1 py-1 px-2 rounded-xs bg-white dark:bg-[#161311] border border-black/8 dark:border-white/10 hover:bg-neutral-50 dark:hover:bg-white/5 text-[10.5px] font-medium cursor-pointer"
-              >
-                <Download className="w-3 h-3" />
-                <span>Export</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center gap-1 py-1 px-2 rounded-xs bg-white dark:bg-[#161311] border border-black/8 dark:border-white/10 hover:bg-neutral-50 dark:hover:bg-white/5 text-[10.5px] font-medium cursor-pointer"
-              >
-                <Upload className="w-3 h-3" />
-                <span>Import</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/json"
-                onChange={handleFileImport}
-                className="hidden"
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-[10px] text-neutral-400 dark:text-neutral-500 font-mono tabular-nums">
-              <span>Penyimpanan</span>
-              <span>~{storageSizeKb} KB</span>
-            </div>
           </div>
         </div>
       </aside>

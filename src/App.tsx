@@ -21,12 +21,21 @@ import {
 import { CustomPopoverDropdown } from './components/CustomPopoverDropdown';
 import { CustomerDiscountPicker } from './components/CustomerDiscountPicker';
 import { BreakdownTypewriter } from './components/BreakdownTypewriter';
+import { GachaNumberText } from './components/GachaNumberText';
 import {
   SidebarHistory,
   CalculationHistoryItem,
   HistoryFolder,
+  SidebarTabMode,
 } from './components/SidebarHistory';
 import { MasterTableAndTests } from './components/MasterTableAndTests';
+import { AIChatWorkspace } from './components/AIChatWorkspace';
+import {
+  ChatThread,
+  AIChatFolder,
+  DEFAULT_AI_FOLDERS,
+  INITIAL_AI_THREADS,
+} from './utils/aiEngine';
 import { triggerHaptic } from './utils/hapticsAndImport';
 import {
   Menu,
@@ -145,9 +154,65 @@ export default function App() {
   }, [isDarkMode]);
 
   // Navigation & Sidebar states (Desktop Hide-Show + Mobile Drawer)
-  const [activeTab, setActiveTab] = useState<'calculator' | 'master' | 'tests'>('calculator');
+  const [activeTab, setActiveTab] = useState<'calculator' | 'master' | 'tests' | 'ai'>('calculator');
+  const [sidebarMode, setSidebarMode] = useState<SidebarTabMode>('history');
   const [isSidebarOpenDesktop, setIsSidebarOpenDesktop] = useState(true);
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
+
+  // Sync sidebar tab automatically when active page changes
+  useEffect(() => {
+    if (activeTab === 'ai') {
+      setSidebarMode('ai');
+    } else if (activeTab === 'calculator') {
+      setSidebarMode((prev) => (prev === 'ai' ? 'history' : prev));
+    } else if (activeTab === 'master') {
+      setSidebarMode('customers');
+    } else if (activeTab === 'tests') {
+      setSidebarMode('history');
+    }
+  }, [activeTab]);
+
+  // AI Threads & Folders Persistence (Unified in Left Sidebar)
+  const [aiFolders, setAiFolders] = useState<AIChatFolder[]>(() => {
+    try {
+      const raw = localStorage.getItem('mypak_ai_folders_v2');
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // Ignore
+    }
+    return DEFAULT_AI_FOLDERS;
+  });
+
+  const [aiThreads, setAiThreads] = useState<ChatThread[]>(() => {
+    try {
+      const raw = localStorage.getItem('mypak_ai_threads_v2');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // Ignore
+    }
+    return INITIAL_AI_THREADS;
+  });
+
+  const [activeAiThreadId, setActiveAiThreadId] = useState<string>('thread-welcome');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mypak_ai_folders_v2', JSON.stringify(aiFolders));
+    } catch {
+      // Ignore
+    }
+  }, [aiFolders]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mypak_ai_threads_v2', JSON.stringify(aiThreads));
+    } catch {
+      // Ignore
+    }
+  }, [aiThreads]);
 
   // History, Folders, and Customers Persistence
   const [folders, setFolders] = useState<HistoryFolder[]>(() => {
@@ -456,6 +521,31 @@ export default function App() {
   };
 
   const activeCustomer = customers.find((c) => c.id === selectedCustomerId);
+  const activeAiThread =
+    aiThreads.find((t) => t.id === activeAiThreadId) || aiThreads[0] || INITIAL_AI_THREADS[0];
+
+  const handleNewAiChat = () => {
+    triggerHaptic('light');
+    const newThread: ChatThread = {
+      id: `thread-${Date.now()}`,
+      title: 'Percakapan Baru',
+      folderId: aiFolders[0]?.id || 'general',
+      createdAt: Date.now(),
+      messages: [
+        {
+          id: `msg-welcome-${Date.now()}`,
+          role: 'assistant',
+          content: `Hi, i'm BlackEYE AI, how can i help you today...\n\nYou can ask me everything about Sheet Pricing`,
+          createdAt: Date.now(),
+          modelUsed: 'gemini-3.8-flash',
+        },
+      ],
+    };
+    setAiThreads((prev) => [newThread, ...prev]);
+    setActiveAiThreadId(newThread.id);
+    setActiveTab('ai');
+    setSidebarMode('ai');
+  };
 
   // Looping smooth typewriter for "BlackEYE- Corrugator Pricing Tools"
   const fullHeadingText = 'BlackEYE- Corrugator Pricing Tools';
@@ -488,12 +578,21 @@ export default function App() {
 
   return (
     <div className="h-[100dvh] w-full flex overflow-hidden bg-[#F9F9F9] dark:bg-[#18191e] text-[#1C1B1A] dark:text-[#F2EFE9]">
-      {/* Left Sidebar Navigation & History / Customer Manager */}
+      {/* Left Sidebar Navigation & Unified History / Customer / AI Manager */}
       <SidebarHistory
         isOpenDesktop={isSidebarOpenDesktop}
         onToggleDesktop={() => setIsSidebarOpenDesktop(!isSidebarOpenDesktop)}
         isOpenMobile={isSidebarOpenMobile}
         onCloseMobile={() => setIsSidebarOpenMobile(false)}
+        sidebarMode={sidebarMode}
+        onChangeSidebarMode={(mode) => {
+          setSidebarMode(mode);
+          if (mode === 'ai' && activeTab !== 'ai') {
+            setActiveTab('ai');
+          } else if (mode === 'history' && activeTab === 'ai') {
+            setActiveTab('calculator');
+          }
+        }}
         items={historyItems}
         folders={folders}
         activeItemId={activeHistoryId}
@@ -534,12 +633,42 @@ export default function App() {
         onUpdateCustomer={handleUpdateCustomer}
         onDeleteCustomer={handleDeleteCustomer}
         onBulkImportCustomers={handleBulkImportCustomers}
-        onExportJson={handleExportJson}
-        onImportJson={(importedItems, importedFolders, importedCustomers) => {
-          setHistoryItems(importedItems);
-          setFolders(importedFolders);
-          if (importedCustomers) setCustomers(importedCustomers);
+        aiThreads={aiThreads}
+        aiFolders={aiFolders}
+        activeAiThreadId={activeAiThread.id}
+        onSelectAiThread={(threadId) => {
+          setActiveAiThreadId(threadId);
+          setActiveTab('ai');
         }}
+        onNewAiChat={handleNewAiChat}
+        onRenameAiThread={(id, newTitle) =>
+          setAiThreads((prev) =>
+            prev.map((t) => (t.id === id ? { ...t, title: newTitle } : t))
+          )
+        }
+        onTogglePinAiThread={(id) =>
+          setAiThreads((prev) =>
+            prev.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t))
+          )
+        }
+        onDeleteAiThreads={(ids) =>
+          setAiThreads((prev) => {
+            const rem = prev.filter((t) => !ids.includes(t.id));
+            if (rem.length === 0) return INITIAL_AI_THREADS;
+            if (ids.includes(activeAiThread.id)) {
+              setActiveAiThreadId(rem[0].id);
+            }
+            return rem;
+          })
+        }
+        onMoveAiThreadToFolder={(threadId, folderId) =>
+          setAiThreads((prev) =>
+            prev.map((t) => (t.id === threadId ? { ...t, folderId } : t))
+          )
+        }
+        onCreateAiFolder={(name) =>
+          setAiFolders((prev) => [...prev, { id: `aif-${Date.now()}`, name }])
+        }
         isDarkMode={isDarkMode}
         onToggleTheme={() => setIsDarkMode(!isDarkMode)}
       />
@@ -567,7 +696,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Zone 2: Clean Navigation Links (Responsive gap & size so mobile never collides) */}
+          {/* Zone 2: Clean Navigation Links (Kalkulator | Database | Testing | AI) */}
           <nav className="flex items-center justify-center gap-3 sm:gap-6 text-[11px] sm:text-xs font-medium min-w-0 overflow-x-auto no-scrollbar">
             <button
               type="button"
@@ -589,7 +718,7 @@ export default function App() {
                   : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
               }`}
             >
-              Master Tabel
+              Database
             </button>
             <button
               type="button"
@@ -600,7 +729,18 @@ export default function App() {
                   : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
               }`}
             >
-              Uji Validasi
+              Testing
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('ai')}
+              className={`py-1 transition-colors whitespace-nowrap cursor-pointer ${
+                activeTab === 'ai'
+                  ? 'text-[#C65D3B] font-semibold underline underline-offset-8 decoration-2'
+                  : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
+              }`}
+            >
+              AI
             </button>
           </nav>
 
@@ -637,7 +777,17 @@ export default function App() {
         {/* Scrollable Main Content Viewport */}
         <main className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6">
           <div className="max-w-5xl mx-auto">
-            {activeTab !== 'calculator' ? (
+            {activeTab === 'ai' ? (
+              <AIChatWorkspace
+                activeCalculation={calculationResult}
+                activeThread={activeAiThread}
+                onUpdateThread={(updater) =>
+                  setAiThreads((prev) =>
+                    prev.map((t) => (t.id === activeAiThread.id ? updater(t) : t))
+                  )
+                }
+              />
+            ) : activeTab !== 'calculator' ? (
               <MasterTableAndTests
                 activeTab={activeTab}
                 currentReferenceSubstance={calculationResult.mappedReferenceSubstance}
@@ -980,10 +1130,15 @@ export default function App() {
 
                           <div className="mt-1.5 flex items-baseline justify-between gap-2">
                             <div className="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-[#C65D3B] tabular-nums">
-                              {formatRupiah(calculationResult.hargaBersihPerM2)}
+                              <GachaNumberText
+                                value={formatRupiah(calculationResult.hargaBersihPerM2)}
+                              />
                             </div>
                             <div className="text-right font-mono text-[10.5px] text-neutral-400 dark:text-neutral-500 tabular-nums shrink-0">
-                              Decimal : Rp {calculationResult.hargaFinalMentah.toFixed(2)}
+                              Decimal :{' '}
+                              <GachaNumberText
+                                value={`Rp ${calculationResult.hargaFinalMentah.toFixed(2)}`}
+                              />
                             </div>
                           </div>
 
