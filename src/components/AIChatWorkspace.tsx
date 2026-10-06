@@ -1733,8 +1733,8 @@ ${masterTableRows}`;
                   handleSendMessage();
                 }
               }}
-              placeholder="Ketik pertanyaan Sheet Pricing, paste gambar (Ctrl+V), atau klik (+) untuk foto/kamera/file..."
-              className="flex-1 max-h-28 px-2.5 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B] resize-none"
+              placeholder="Ask anything..."
+              className="flex-1 max-h-28 px-2.5 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B] resize-none overflow-y-auto no-scrollbar"
             />
 
             {isStreaming ? (
