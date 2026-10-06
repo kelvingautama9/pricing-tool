@@ -27,6 +27,7 @@ import {
   FileText,
   FileSpreadsheet,
   RefreshCw,
+  ArrowDown,
 } from 'lucide-react';
 import {
   AI_MODELS,
@@ -147,6 +148,8 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesScrollContainerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef<boolean>(false);
+  const [showScrollToBottomBtn, setShowScrollToBottomBtn] = useState<boolean>(false);
   const fileAttachInputRef = useRef<HTMLInputElement>(null);
   const galleryAttachInputRef = useRef<HTMLInputElement>(null);
   const cameraNativeInputRef = useRef<HTMLInputElement>(null);
@@ -243,18 +246,61 @@ ${masterTableRows}`;
     return msgTokens + sysTokens + draftTokens;
   }, [activeThread, activeRoleObj, inputText]);
 
-  const scrollToBottom = (smooth = true) => {
+  const scrollToBottom = (smooth = true, force = false) => {
     const container = messagesScrollContainerRef.current;
     if (!container) return;
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: smooth ? 'smooth' : 'auto',
-    });
+    if (force) {
+      userScrolledUpRef.current = false;
+      setShowScrollToBottomBtn(false);
+    }
+    if (!force && userScrolledUpRef.current) return;
+
+    if (smooth) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth',
+      });
+    } else {
+      // Smooth 60-120fps interpolation during live AI typing so viewport glides with output
+      const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (distance > 1) {
+        if (distance > 180) {
+          container.scrollTop = container.scrollHeight - container.clientHeight;
+        } else {
+          container.scrollTop += Math.max(2, distance * 0.35);
+        }
+      }
+    }
   };
 
+  const handleMessagesScroll = () => {
+    const container = messagesScrollContainerRef.current;
+    if (!container) return;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isScrolledUp = distanceFromBottom > 95;
+    userScrolledUpRef.current = isScrolledUp;
+    setShowScrollToBottomBtn(isScrolledUp);
+  };
+
+  const lastMessage = activeThread?.messages[activeThread.messages.length - 1];
+  const lastMessageContentLen = lastMessage?.content?.length || 0;
+  const lastMessageReasoningLen = lastMessage?.reasoning?.length || 0;
+
+  // Scroll smoothly when switching thread or adding a new message
   useEffect(() => {
-    scrollToBottom(!isStreaming);
-  }, [activeThread?.messages.length, isStreaming]);
+    userScrolledUpRef.current = false;
+    setShowScrollToBottomBtn(false);
+    const id = requestAnimationFrame(() => scrollToBottom(true, true));
+    return () => cancelAnimationFrame(id);
+  }, [activeThread?.id, activeThread?.messages.length]);
+
+  // Continuously follow the typing output in real time as content grows
+  useEffect(() => {
+    if (isStreaming && !userScrolledUpRef.current) {
+      scrollToBottom(false, false);
+    }
+  }, [lastMessageContentLen, lastMessageReasoningLen, isStreaming]);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -528,6 +574,8 @@ ${masterTableRows}`;
     triggerHaptic('medium');
     setPlusMenuOpen(false);
     setRateLimitBanner({ active: false, failedModel: '' });
+    userScrolledUpRef.current = false;
+    setShowScrollToBottomBtn(false);
 
     const targetModelId = overrideModelId || selectedModelId;
     const targetModelObj =
@@ -616,6 +664,10 @@ ${masterTableRows}`;
           ),
         }));
 
+        if (!userScrolledUpRef.current) {
+          scrollToBottom(false, false);
+        }
+
         rafId = requestAnimationFrame(tickSmoothStream);
       } else if (networkStreamDone) {
         setIsStreaming(false);
@@ -635,6 +687,9 @@ ${masterTableRows}`;
               : m
           ),
         }));
+        if (!userScrolledUpRef.current) {
+          requestAnimationFrame(() => scrollToBottom(true, false));
+        }
         rafId = null;
         if (useCanvasMode) {
           const detected = extractCodeArtifact(targetText);
@@ -1092,7 +1147,8 @@ ${masterTableRows}`;
         {/* Messages Scroll Stage */}
         <div
           ref={messagesScrollContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-3"
+          onScroll={handleMessagesScroll}
+          className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-3 relative"
         >
           {activeThread.messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-2 py-8">
@@ -1242,6 +1298,20 @@ ${masterTableRows}`;
           )}
           <div ref={chatEndRef} />
         </div>
+
+        {/* Floating Follow / Scroll-to-Bottom Button when user scrolls up */}
+        {showScrollToBottomBtn && (
+          <div className="relative z-20 flex justify-center -mt-9 mb-1 pointer-events-none">
+            <button
+              type="button"
+              onClick={() => scrollToBottom(true, true)}
+              className="pointer-events-auto px-2.5 py-1 rounded-md bg-[#1C1B1A]/90 dark:bg-[#F2EFE9]/90 text-white dark:text-[#1C1B1A] shadow-md flex items-center gap-1.5 text-[10.5px] font-semibold cursor-pointer transition-transform active:scale-95"
+            >
+              <ArrowDown className="w-3 h-3 text-[#C65D3B]" />
+              <span>{isStreaming ? 'Ikuti Jawaban Live' : 'Ke Bawah'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Rate Limit 429 Auto-Fallback Alert Banner */}
         {rateLimitBanner.active && (
