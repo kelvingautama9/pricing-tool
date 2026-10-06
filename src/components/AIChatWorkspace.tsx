@@ -19,7 +19,6 @@ import {
   Copy,
   Check,
   Square,
-  Terminal,
   BookOpen,
   ImagePlus,
   Camera,
@@ -1088,27 +1087,6 @@ ${masterTableRows}`;
               <span className="hidden sm:inline">Parameter</span>
             </button>
           </div>
-        </div>
-
-        {/* Dynamic Context Sniffer Grounding Strip */}
-        <div className="px-3 py-1 bg-[#F9F9F9] dark:bg-[#1d1c1a] border-b border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-neutral-500 shrink-0 relative z-20">
-          <div className="flex items-center gap-1.5 truncate">
-            <Terminal className="w-3 h-3 text-[#C65D3B] shrink-0" />
-            <span className="truncate">
-              Spek: <strong>{activeCalculation.inputSubstanceString}</strong> ({activeCalculation.input.flute}) ·{' '}
-              <strong className="text-[#C65D3B]">
-                {activeCalculation.success
-                  ? formatRupiah(activeCalculation.hargaBersihPerM2)
-                  : 'Error'}
-              </strong>
-              /M² · DB: <strong>{customers.length} Customer</strong>
-            </span>
-          </div>
-          <span className="text-[9.5px] text-neutral-400 shrink-0">
-            {activeModelObj.provider === 'local'
-              ? `Temp: ${temperature} · Context: ${estimatedActiveTokens}/${contextWindow} tok`
-              : `Multitask DB + Pricing Aktif · Role Temp: ${activeRoleObj.temperature ?? 0.2}`}
-          </span>
         </div>
 
         {/* Messages Scroll Stage */}
