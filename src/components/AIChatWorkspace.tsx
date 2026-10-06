@@ -48,20 +48,29 @@ import {
 } from '../utils/aiEngine';
 import { estimateTokens } from '../utils/contextSniffer';
 import { triggerHaptic } from '../utils/hapticsAndImport';
-import { PricingCalculationResult, formatRupiah } from '../utils/pricingEngine';
+import {
+  PricingCalculationResult,
+  CustomerAccount,
+  BASE_PRICE_TABLE,
+  formatRupiah,
+} from '../utils/pricingEngine';
 import { RichMessageContent } from './RichMessageContent';
 
 interface AIChatWorkspaceProps {
   activeCalculation: PricingCalculationResult;
+  customers: CustomerAccount[];
+  selectedCustomerId: string;
   activeThread: ChatThread;
   onUpdateThread: (updater: (thread: ChatThread) => ChatThread) => void;
 }
 
-const STORAGE_KEY_AI_ROLES = 'mypak_ai_roles_v1';
+const STORAGE_KEY_AI_ROLES = 'mypak_ai_roles_v2';
 const STORAGE_KEY_AI_SERVER = 'mypak_ai_server_config_v1';
 
 export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   activeCalculation,
+  customers,
+  selectedCustomerId,
   activeThread,
   onUpdateThread,
 }) => {
@@ -181,6 +190,47 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
       2
     )}, HargaBersihPerM2=${formatRupiah(activeCalculation.hargaBersihPerM2)}`;
   }, [activeCalculation]);
+
+  // Live Customer Database + Master Price Table Snapshot for Multitasking across ALL Roles
+  const customerDatabaseSnapshot = useMemo(() => {
+    const activeCust = customers.find((c) => c.id === selectedCustomerId);
+    const tierCounts = {
+      'Tier 1': customers.filter((c) => c.tier === 'Tier 1').length,
+      'Tier 2': customers.filter((c) => c.tier === 'Tier 2').length,
+      'Tier 3': customers.filter((c) => c.tier === 'Tier 3').length,
+      'Tier 4': customers.filter((c) => c.tier === 'Tier 4').length,
+    };
+
+    const customerRows = customers
+      .map(
+        (c, idx) =>
+          `${idx + 1}. ${c.name} | Tier: ${c.tier} | SW: ${
+            c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`
+          } | DW: ${
+            c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`
+          }`
+      )
+      .join('\n');
+
+    const masterTableRows = BASE_PRICE_TABLE.map(
+      (r) =>
+        `${r.no}. ${r.substance} | B/F: Rp ${r['B/F'].toLocaleString('id-ID')} | C/F: Rp ${r['C/F'].toLocaleString('id-ID')} | E/F: Rp ${r['E/F'].toLocaleString('id-ID')} | CB/F (DW): Rp ${r['CB/F'].toLocaleString('id-ID')}`
+    ).join('\n');
+
+    return `Total Customer Terdaftar/Diimpor: ${customers.length} Customer
+Distribusi Tier: Tier 1 = ${tierCounts['Tier 1']}, Tier 2 = ${tierCounts['Tier 2']}, Tier 3 = ${tierCounts['Tier 3']}, Tier 4 = ${tierCounts['Tier 4']}
+Customer yang Sedang Dipilih di Kalkulator: ${
+      activeCust
+        ? `${activeCust.name} (${activeCust.tier}, SW: ${activeCust.swMarginPercent}%, DW: ${activeCust.dwMarginPercent}%)`
+        : 'Manual / Tidak memilih customer spesifik'
+    }
+
+DAFTAR LENGKAP DATABASE CUSTOMER (No. Nama | Tier | Diskon/Margin SW | Diskon/Margin DW):
+${customerRows}
+
+TABEL MASTER HARGA DASAR 15 SUBSTANCE ACUAN (Single Wall - Ketebalan 125):
+${masterTableRows}`;
+  }, [customers, selectedCustomerId]);
 
   // Estimate current token usage
   const estimatedActiveTokens = useMemo(() => {
@@ -624,6 +674,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
         systemPrompt: `${activeRoleObj.prompt}${modeDirectives}`,
         activeRolePrompt: `${activeRoleObj.prompt}${modeDirectives}`,
         activeCalculatorSnapshot: calculatorSnapshot,
+        customerDatabaseSnapshot,
         useSearchGrounding,
       },
       controller.signal,
@@ -1038,19 +1089,19 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
           <div className="flex items-center gap-1.5 truncate">
             <Terminal className="w-3 h-3 text-[#C65D3B] shrink-0" />
             <span className="truncate">
-              Spek Aktif: <strong>{activeCalculation.inputSubstanceString}</strong> ({activeCalculation.input.flute}) ·{' '}
+              Spek: <strong>{activeCalculation.inputSubstanceString}</strong> ({activeCalculation.input.flute}) ·{' '}
               <strong className="text-[#C65D3B]">
                 {activeCalculation.success
                   ? formatRupiah(activeCalculation.hargaBersihPerM2)
                   : 'Error'}
               </strong>
-              /M²
+              /M² · DB: <strong>{customers.length} Customer</strong>
             </span>
           </div>
           <span className="text-[9.5px] text-neutral-400 shrink-0">
             {activeModelObj.provider === 'local'
               ? `Temp: ${temperature} · Context: ${estimatedActiveTokens}/${contextWindow} tok`
-              : `Role Temp: ${activeRoleObj.temperature ?? 0.2} · Auto-Fallback Aktif`}
+              : `Multitask DB + Pricing Aktif · Role Temp: ${activeRoleObj.temperature ?? 0.2}`}
           </span>
         </div>
 

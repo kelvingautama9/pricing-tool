@@ -780,6 +780,8 @@ export default function App() {
             {activeTab === 'ai' ? (
               <AIChatWorkspace
                 activeCalculation={calculationResult}
+                customers={customers}
+                selectedCustomerId={selectedCustomerId}
                 activeThread={activeAiThread}
                 onUpdateThread={(updater) =>
                   setAiThreads((prev) =>

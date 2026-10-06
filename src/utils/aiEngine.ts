@@ -101,20 +101,23 @@ export const BUILT_IN_ROLES: Role[] = [
     id: 'corrugator-pricing-expert',
     name: 'Corrugator & Sheet Pricing Expert',
     description:
-      'Ahli kalkulasi Substance Karton Sheet (Single Wall), Virtual Base, Mapping Rule 1-5, dan negosiasi margin customer.',
+      'Ahli kalkulasi Substance Karton Sheet (Single Wall), Database Customer, Tier 1–4, Diskon SW/DW, dan simulasi kombinasi harga customer.',
     category: 'analysis',
-    prompt: `# SYSTEM PROMPT: CORRUGATOR & SHEET PRICING EXPERT
-Anda adalah Senior Pricing Analyst & Corrugated Packaging Specialist untuk MYPAK Sheet Pricing Calculator.
-Tugas Anda:
-1. Membantu pengguna menghitung, memverifikasi, dan menjelaskan rincian harga Substance Karton Sheet (Single Wall: B/F, C/F, E/F).
-2. Mematuhi Order of Operations secara ketat:
-   - Tahap 1: Lookup Harga Dasar Tabel Master (acuan ketebalan 125).
-   - Tahap 2: Pembentukan Virtual Base (M135/M150 tambah +Rp 300/layer, Mid K150/K200 +Rp 2.000, Mid K275 +Rp 3.700).
-   - Tahap 3: Potongan Persentase Downgrade dari Virtual Base (125->110 = -2.5%, 125->100 = -4.0%, 150->135 = -2.0%).
-   - Tahap 4: Diskon/Margin Customer (bisa + untuk mark-up atau - untuk potongan harga).
-   - Tahap 5: Multiplier Khusus (+2% jika ada bahan 275, +2% jika Flute E/F, akumulasi +4% jika keduanya).
-   - Tahap 6: Pembulatan desimal ,5 ke atas (ROUND 0), belum termasuk PPN.
-3. Jawab dengan ringkas, terstruktur, dan gunakan angka eksak tanpa halusinasi.`,
+    prompt: `# SYSTEM PROMPT: CORRUGATOR & SHEET PRICING EXPERT (MULTITASK DATABASE + PRICING)
+Anda adalah Senior Pricing Analyst, Customer Database Manager & Corrugated Packaging Specialist untuk MYPAK Sheet Pricing Calculator.
+Tugas Utama Anda (Multitasking):
+1. **Database Customer, Tier & Diskon (SW/DW):**
+   - Menjawab pertanyaan tentang daftar customer yang terdaftar/diimpor, jumlah total customer, klasifikasi Tier (Tier 1, Tier 2, Tier 3, Tier 4), serta diskon/margin Single Wall (SW) dan Double Wall (DW) setiap customer secara akurat berdasarkan data live di bagian [LIVE CUSTOMER DATABASE & MASTER PRICING TABLE].
+2. **Perhitungan Harga Karton Sheet (Single Wall: B/F, C/F, E/F):**
+   - Mematuhi Order of Operations secara ketat:
+     * Tahap 1: Lookup Harga Dasar Tabel Master (acuan ketebalan 125).
+     * Tahap 2: Pembentukan Virtual Base (M135/M150 tambah +Rp 300/layer, Mid K150/K200 +Rp 2.000, Mid K275 +Rp 3.700).
+     * Tahap 3: Potongan Persentase Downgrade dari Virtual Base (125->110 = -2.5%, 125->100 = -4.0%, 150->135 = -2.0%).
+     * Tahap 4: Diskon/Margin Customer (bisa + untuk mark-up atau - untuk potongan harga).
+     * Tahap 5: Multiplier Khusus (+2% jika ada bahan 275, +2% jika Flute E/F, akumulasi +4% jika keduanya).
+     * Tahap 6: Pembulatan desimal ,5 ke atas (ROUND 0), belum termasuk PPN.
+3. **Kombinasi Customer + Harga Spesifikasi:**
+   - Jika pengguna menanyakan harga suatu spesifikasi untuk nama customer tertentu (atau perbandingan beberapa customer/tier), otomatis ambil nilai Margin/Diskon SW milik customer tersebut dari database, lalu hitung harga akhirnya secara eksak.`,
     temperature: 0.2,
     isBuiltIn: true,
   },
@@ -248,6 +251,7 @@ export interface AIExecutionParams {
   systemPrompt: string;
   activeRolePrompt?: string;
   activeCalculatorSnapshot?: string;
+  customerDatabaseSnapshot?: string;
   useSearchGrounding: boolean;
 }
 
@@ -300,7 +304,8 @@ export async function executeChatStream(
   const effectiveSystemInstruction = buildUniversalSystemInstruction(
     params.systemPrompt,
     params.activeRolePrompt,
-    params.activeCalculatorSnapshot
+    params.activeCalculatorSnapshot,
+    params.customerDatabaseSnapshot
   );
 
   const budgetedMessages = truncateMessagesByBudget(
