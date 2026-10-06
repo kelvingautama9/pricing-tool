@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Plus,
   X,
@@ -20,6 +21,13 @@ import {
   Square,
   Terminal,
   BookOpen,
+  ImagePlus,
+  Camera,
+  Brain,
+  Palette,
+  FileText,
+  FileSpreadsheet,
+  RefreshCw,
 } from 'lucide-react';
 import {
   AI_MODELS,
@@ -30,6 +38,7 @@ import {
   ChatThread,
   ChatMessage,
   ChatImageAttachment,
+  ChatFileAttachment,
   AIServerConfig,
   executeChatStream,
   parseRoleMarkdownFile,
@@ -100,10 +109,23 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const [temperature, setTemperature] = useState<number>(0.2);
   const [contextWindow, setContextWindow] = useState<number>(8192);
   const [useSearchGrounding, setUseSearchGrounding] = useState<boolean>(false);
+  const [useDeepReasoning, setUseDeepReasoning] = useState<boolean>(false);
+  const [useCanvasMode, setUseCanvasMode] = useState<boolean>(false);
 
-  // 4. Input & Streaming State
+  // 4. Input, Attachments, Plus Menu & Camera State
   const [inputText, setInputText] = useState<string>('');
   const [attachedImages, setAttachedImages] = useState<ChatImageAttachment[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<ChatFileAttachment[]>([]);
+  const [plusMenuOpen, setPlusMenuOpen] = useState<boolean>(false);
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+
+  // Live Camera Modal State
+  const [cameraModalOpen, setCameraModalOpen] = useState<boolean>(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [rateLimitBanner, setRateLimitBanner] = useState<{
     active: boolean;
@@ -117,6 +139,8 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileAttachInputRef = useRef<HTMLInputElement>(null);
+  const galleryAttachInputRef = useRef<HTMLInputElement>(null);
+  const cameraNativeInputRef = useRef<HTMLInputElement>(null);
   const roleImportInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -177,12 +201,23 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
     scrollToBottom();
   }, [activeThread?.messages.length, isStreaming]);
 
-  // File & Image Attachment Handler
-  const handleAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
 
-    Array.from(files).forEach((file) => {
+  // Universal File & Photo Processor (Gallery, Files, Excel, PDF, Markdown, CSV, JSON, Drag & Drop)
+  const processIncomingFiles = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+    triggerHaptic('light');
+
+    files.forEach((file) => {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'txt';
+      const sizeLabel = formatFileSize(file.size);
+
+      // 1. Image / Photo from Gallery or Camera
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -203,22 +238,193 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
           }
         };
         reader.readAsDataURL(file);
-      } else {
+        return;
+      }
+
+      // 2. Excel Spreadsheet (.xlsx, .xls) -> Parse into Markdown Table
+      if (ext === 'xlsx' || ext === 'xls') {
         const reader = new FileReader();
         reader.onload = (ev) => {
-          const textContent = String(ev.target?.result || '');
-          const ext = file.name.split('.').pop()?.toLowerCase() || 'txt';
-          const formattedBlock = `\n[File Terlampir: ${file.name}]\n\`\`\`${ext}\n${textContent.slice(
-            0,
-            12000
-          )}\n\`\`\`\n`;
-          setInputText((prev) => `${prev}${formattedBlock}`);
-        };
-        reader.readAsText(file);
-      }
-    });
+          try {
+            const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetSummaries: string[] = [];
 
+            workbook.SheetNames.slice(0, 3).forEach((sheetName) => {
+              const sheet = workbook.Sheets[sheetName];
+              const rows = XLSX.utils.sheet_to_json<string[]>(sheet, {
+                header: 1,
+                defval: '',
+              });
+              const nonEmptyRows = rows
+                .filter((r) => Array.isArray(r) && r.some((cell) => String(cell).trim() !== ''))
+                .slice(0, 120);
+
+              if (nonEmptyRows.length > 0) {
+                const header = nonEmptyRows[0].map((c) => String(c).trim() || '-');
+                const sep = header.map(() => '---');
+                const body = nonEmptyRows
+                  .slice(1)
+                  .map((r) => `| ${header.map((_, idx) => String(r[idx] ?? '').trim()).join(' | ')} |`)
+                  .join('\n');
+                sheetSummaries.push(
+                  `### Sheet: ${sheetName}\n| ${header.join(' | ')} |\n| ${sep.join(' | ')} |\n${body}`
+                );
+              }
+            });
+
+            setAttachedFiles((prev) => [
+              ...prev,
+              {
+                id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                name: file.name,
+                ext: 'xlsx',
+                sizeLabel,
+                textContent:
+                  sheetSummaries.join('\n\n') || 'Spreadsheet kosong.',
+              },
+            ]);
+          } catch {
+            // Fallback
+          }
+        };
+        reader.readAsArrayBuffer(file);
+        return;
+      }
+
+      // 3. PDF Document (.pdf) -> Native Gemini inlineData Base64
+      if (file.type === 'application/pdf' || ext === 'pdf') {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataUrl = String(ev.target?.result || '');
+          const commaIdx = dataUrl.indexOf(',');
+          if (commaIdx !== -1) {
+            setAttachedFiles((prev) => [
+              ...prev,
+              {
+                id: `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                name: file.name,
+                ext: 'pdf',
+                sizeLabel,
+                base64Data: dataUrl.slice(commaIdx + 1),
+                mimeType: 'application/pdf',
+              },
+            ]);
+          }
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // 4. Text / Markdown / CSV / JSON / Code files
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const textContent = String(ev.target?.result || '').slice(0, 24000);
+        setAttachedFiles((prev) => [
+          ...prev,
+          {
+            id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            name: file.name,
+            ext,
+            sizeLabel,
+            textContent,
+          },
+        ]);
+      };
+      reader.readAsText(file);
+    });
+  };
+
+  // File & Image Attachment Handler
+  const handleAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processIncomingFiles(e.target.files);
+    }
     e.target.value = '';
+  };
+
+  // Live Camera Modal Lifecycle
+  const stopCameraStream = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    }
+  };
+
+  const startCameraStream = async (facing: 'environment' | 'user') => {
+    stopCameraStream();
+    setCameraError(null);
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Browser tidak mendukung akses kamera langsung.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err: unknown) {
+      setCameraError(
+        err instanceof Error
+          ? err.message
+          : 'Tidak dapat mengakses kamera. Gunakan tombol Kamera Perangkat di bawah.'
+      );
+    }
+  };
+
+  const handleOpenCameraModal = () => {
+    setPlusMenuOpen(false);
+    setCameraModalOpen(true);
+    setTimeout(() => {
+      startCameraStream(cameraFacingMode);
+    }, 80);
+  };
+
+  const handleCloseCameraModal = () => {
+    stopCameraStream();
+    setCameraModalOpen(false);
+  };
+
+  const handleSwitchCameraFacing = () => {
+    const nextFacing = cameraFacingMode === 'environment' ? 'user' : 'environment';
+    setCameraFacingMode(nextFacing);
+    startCameraStream(nextFacing);
+  };
+
+  const handleCaptureCameraPhoto = () => {
+    const videoEl = videoRef.current;
+    if (!videoEl || !videoEl.videoWidth) return;
+    triggerHaptic('success');
+
+    const canvas = document.createElement('canvas');
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    const commaIdx = dataUrl.indexOf(',');
+    if (commaIdx !== -1) {
+      setAttachedImages((prev) => [
+        ...prev,
+        {
+          id: `cam-${Date.now()}`,
+          name: `camera-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.jpg`,
+          mimeType: 'image/jpeg',
+          data: dataUrl.slice(commaIdx + 1),
+          previewUrl: dataUrl,
+        },
+      ]);
+    }
+    handleCloseCameraModal();
   };
 
   // Clipboard Paste Image Support
@@ -258,9 +464,14 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   // Send Chat Message Lifecycle
   const handleSendMessage = async (overrideText?: string, overrideModelId?: string) => {
     const textToSend = (overrideText ?? inputText).trim();
-    if ((!textToSend && attachedImages.length === 0) || isStreaming) return;
+    if (
+      (!textToSend && attachedImages.length === 0 && attachedFiles.length === 0) ||
+      isStreaming
+    )
+      return;
 
     triggerHaptic('medium');
+    setPlusMenuOpen(false);
     setRateLimitBanner({ active: false, failedModel: '' });
 
     const targetModelId = overrideModelId || selectedModelId;
@@ -270,8 +481,13 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: textToSend,
+      content:
+        textToSend ||
+        (attachedImages.length > 0
+          ? 'Tolong analisis foto/gambar terlampir.'
+          : `Tolong analisis file (${attachedFiles.map((f) => f.name).join(', ')}) terlampir.`),
       images: attachedImages.length > 0 ? [...attachedImages] : undefined,
+      files: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
       createdAt: Date.now(),
     };
 
@@ -304,6 +520,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
     if (!overrideText) {
       setInputText('');
       setAttachedImages([]);
+      setAttachedFiles([]);
     }
 
     setIsStreaming(true);
@@ -364,6 +581,12 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
           ),
         }));
         rafId = null;
+        if (useCanvasMode) {
+          const detected = extractCodeArtifact(targetText);
+          if (detected) {
+            setActiveArtifact(detected);
+          }
+        }
       } else {
         rafId = requestAnimationFrame(tickSmoothStream);
       }
@@ -378,6 +601,17 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
     const effectiveContextWindow =
       targetModelObj.provider === 'local' ? contextWindow : 32768;
 
+    const modeDirectives = [
+      useDeepReasoning
+        ? '\n[DEEP RESEARCH & REASONING MODE ACTIVE]\nBerikan analisis mendalam secara sistematis dan bertahap (step-by-step), validasi setiap rumus dan asumsi matematika secara menyeluruh, serta sertakan tabel perbandingan jika relevan.'
+        : '',
+      useCanvasMode
+        ? '\n[CANVAS & INTERACTIVE CODE PREVIEW ACTIVE]\nSertakan blok kode interaktif (```html atau ```svg atau ```chart) yang bersih agar dapat langsung dirender secara visual di panel Canvas Workspace.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
     await executeChatStream(
       targetModelObj.provider,
       serverConfig,
@@ -387,8 +621,8 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
         temperature: effectiveTemperature,
         topP: 0.95,
         contextWindow: effectiveContextWindow,
-        systemPrompt: activeRoleObj.prompt,
-        activeRolePrompt: activeRoleObj.prompt,
+        systemPrompt: `${activeRoleObj.prompt}${modeDirectives}`,
+        activeRolePrompt: `${activeRoleObj.prompt}${modeDirectives}`,
         activeCalculatorSnapshot: calculatorSnapshot,
         useSearchGrounding,
       },
@@ -625,7 +859,38 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   };
 
   return (
-    <div className="h-[calc(100dvh-5.5rem)] w-full flex rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 overflow-hidden relative">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!isDraggingOver) setIsDraggingOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setIsDraggingOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDraggingOver(false);
+        if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+          processIncomingFiles(e.dataTransfer.files);
+        }
+      }}
+      className="h-[calc(100dvh-5.5rem)] w-full flex rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 overflow-hidden relative"
+    >
+      {/* Drag & Drop Overlay */}
+      {isDraggingOver && (
+        <div className="absolute inset-0 z-50 bg-[#C65D3B]/15 backdrop-blur-[2px] border-2 border-dashed border-[#C65D3B] rounded-lg flex flex-col items-center justify-center gap-2 pointer-events-none">
+          <div className="w-12 h-12 rounded-xl bg-[#C65D3B] text-white flex items-center justify-center shadow-lg">
+            <ImagePlus className="w-6 h-6" />
+          </div>
+          <div className="text-sm font-display font-bold text-[#1C1B1A] dark:text-white">
+            Lepaskan Foto, Excel, PDF, atau Dokumen di sini
+          </div>
+          <p className="text-xs text-neutral-500 dark:text-neutral-300">
+            Mendukung Gambar, .XLSX, .PDF, .CSV, .MD, .JSON, & Kode
+          </p>
+        </div>
+      )}
+
       {/* MAIN CHAT STAGE (No duplicate internal sidebar — managed via main left Sidebar) */}
       <div className="flex-1 flex flex-col min-w-0 h-full bg-[#FFFFFF] dark:bg-[#161311]">
         {/* Topbar Island: [Model Dropdown] [Role Library] [Server/Engine] */}
@@ -844,8 +1109,35 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
                             key={img.id}
                             src={img.previewUrl}
                             alt={img.name}
-                            className="h-20 w-auto rounded-xs object-cover border border-black/10"
+                            className="h-24 w-auto rounded-xs object-cover border border-black/15"
                           />
+                        ))}
+                      </div>
+                    )}
+
+                    {msg.files && msg.files.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {msg.files.map((f) => (
+                          <div
+                            key={f.id}
+                            className={`px-2.5 py-1.5 rounded-xs border flex items-center gap-2 text-[11px] ${
+                              isUser
+                                ? 'bg-black/20 border-white/20 text-white'
+                                : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/10 dark:border-white/10 text-[#1C1B1A] dark:text-[#F2EFE9]'
+                            }`}
+                          >
+                            {f.ext === 'xlsx' || f.ext === 'xls' || f.ext === 'csv' ? (
+                              <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                            ) : (
+                              <FileText className="w-3.5 h-3.5 shrink-0" />
+                            )}
+                            <span className="font-medium truncate max-w-[160px]">
+                              {f.name}
+                            </span>
+                            <span className="px-1 py-0.5 rounded-xs bg-black/15 text-[9px] font-mono uppercase">
+                              {f.ext}
+                            </span>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -933,16 +1225,32 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
           </div>
         )}
 
-        {/* Attached Image Previews */}
-        {attachedImages.length > 0 && (
-          <div className="px-3 py-1.5 border-t border-black/6 dark:border-white/8 flex items-center gap-2 overflow-x-auto">
+        {/* Attached Photos & Files Previews + Active Mode Chips */}
+        {(attachedImages.length > 0 ||
+          attachedFiles.length > 0 ||
+          useSearchGrounding ||
+          useDeepReasoning ||
+          useCanvasMode) && (
+          <div className="px-3 py-2 border-t border-black/6 dark:border-white/8 bg-[#F9F9F9]/60 dark:bg-[#1a1918] flex flex-wrap items-center gap-2 overflow-x-auto">
+            {/* Image Thumbnails */}
             {attachedImages.map((img) => (
-              <div key={img.id} className="relative group shrink-0">
+              <div
+                key={img.id}
+                className="relative group shrink-0 flex items-center gap-2 p-1 pr-2 rounded-md bg-white dark:bg-[#161311] border border-black/12 dark:border-white/12 shadow-2xs"
+              >
                 <img
                   src={img.previewUrl}
                   alt={img.name}
-                  className="h-12 w-12 rounded-xs object-cover border border-black/15"
+                  className="h-10 w-10 rounded-xs object-cover"
                 />
+                <div className="max-w-[110px]">
+                  <div className="text-[10.5px] font-medium truncate">
+                    {img.name}
+                  </div>
+                  <div className="text-[9px] font-mono text-neutral-400 uppercase">
+                    Foto / Image
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() =>
@@ -950,34 +1258,347 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
                       prev.filter((item) => item.id !== img.id)
                     )
                   }
-                  className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-xs p-0.5 cursor-pointer"
+                  className="ml-1 p-0.5 rounded-xs bg-rose-600/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer"
                 >
-                  <X className="w-2.5 h-2.5" />
+                  <X className="w-3 h-3" />
                 </button>
               </div>
             ))}
+
+            {/* Document / Excel / PDF Cards */}
+            {attachedFiles.map((file) => (
+              <div
+                key={file.id}
+                className="relative shrink-0 flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white dark:bg-[#161311] border border-black/12 dark:border-white/12 shadow-2xs"
+              >
+                <div className="w-7 h-7 rounded-xs bg-[#C65D3B]/12 text-[#C65D3B] flex items-center justify-center shrink-0">
+                  {file.ext === 'xlsx' || file.ext === 'xls' || file.ext === 'csv' ? (
+                    <FileSpreadsheet className="w-4 h-4" />
+                  ) : (
+                    <FileText className="w-4 h-4" />
+                  )}
+                </div>
+                <div className="max-w-[140px]">
+                  <div className="text-[10.5px] font-semibold truncate">
+                    {file.name}
+                  </div>
+                  <div className="text-[9px] font-mono text-neutral-400 uppercase">
+                    {file.ext} · {file.sizeLabel}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAttachedFiles((prev) =>
+                      prev.filter((item) => item.id !== file.id)
+                    )
+                  }
+                  className="ml-1 p-0.5 rounded-xs bg-rose-600/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+
+            {/* Active Tool Mode Chips */}
+            {useSearchGrounding && (
+              <button
+                type="button"
+                onClick={() => setUseSearchGrounding(false)}
+                className="px-2 py-1 rounded-xs bg-cyan-500/12 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 text-[10.5px] font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <Globe className="w-3 h-3" />
+                <span>Web Search</span>
+                <X className="w-2.5 h-2.5 ml-0.5 opacity-70" />
+              </button>
+            )}
+            {useDeepReasoning && (
+              <button
+                type="button"
+                onClick={() => setUseDeepReasoning(false)}
+                className="px-2 py-1 rounded-xs bg-purple-500/12 border border-purple-500/30 text-purple-700 dark:text-purple-300 text-[10.5px] font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <Brain className="w-3 h-3" />
+                <span>Deep Research</span>
+                <X className="w-2.5 h-2.5 ml-0.5 opacity-70" />
+              </button>
+            )}
+            {useCanvasMode && (
+              <button
+                type="button"
+                onClick={() => setUseCanvasMode(false)}
+                className="px-2 py-1 rounded-xs bg-emerald-500/12 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[10.5px] font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <Palette className="w-3 h-3" />
+                <span>Canvas Preview</span>
+                <X className="w-2.5 h-2.5 ml-0.5 opacity-70" />
+              </button>
+            )}
           </div>
         )}
 
-        {/* Bottom Input Dock */}
-        <div className="p-2.5 border-t border-black/8 dark:border-white/10 bg-[#F9F9F9] dark:bg-[#18191e]">
+        {/* Bottom Input Dock with Multimodal Plus Menu (Gemini / ChatGPT / Claude style) */}
+        <div className="p-2.5 border-t border-black/8 dark:border-white/10 bg-[#F9F9F9] dark:bg-[#18191e] relative">
+          {/* Hidden File / Gallery / Native Camera Inputs */}
+          <input
+            ref={galleryAttachInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={handleAttachmentUpload}
+            className="hidden"
+          />
+          <input
+            ref={fileAttachInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.xlsx,.xls,.csv,.md,.markdown,.json,.txt,.ts,.tsx,.js,.jsx,.html,.css"
+            onChange={handleAttachmentUpload}
+            className="hidden"
+          />
+          <input
+            ref={cameraNativeInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleAttachmentUpload}
+            className="hidden"
+          />
+
           <div className="flex items-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => fileAttachInputRef.current?.click()}
-              title="Lampirkan Gambar, Markdown (.md), JSON, atau CSV"
-              className="h-8 w-8 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 flex items-center justify-center text-neutral-500 hover:text-[#C65D3B] cursor-pointer shrink-0"
-            >
-              <Paperclip className="w-3.5 h-3.5" />
-            </button>
-            <input
-              ref={fileAttachInputRef}
-              type="file"
-              multiple
-              accept="image/*,.md,.markdown,.json,.csv,.txt,.ts,.tsx,.html"
-              onChange={handleAttachmentUpload}
-              className="hidden"
-            />
+            {/* Plus / Multimodal & Tools Popover Trigger */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setPlusMenuOpen(!plusMenuOpen);
+                }}
+                title="Tambah foto, kamera, file, atau fitur AI"
+                className={`h-8 w-8 rounded-xs border flex items-center justify-center transition-colors cursor-pointer ${
+                  plusMenuOpen
+                    ? 'bg-[#C65D3B] border-[#C65D3B] text-white'
+                    : 'bg-white dark:bg-[#161311] border-black/10 dark:border-white/10 text-neutral-600 dark:text-neutral-300 hover:border-[#C65D3B] hover:text-[#C65D3B]'
+                }`}
+              >
+                <Plus
+                  className={`w-4 h-4 transition-transform duration-200 ${
+                    plusMenuOpen ? 'rotate-45' : ''
+                  }`}
+                />
+              </button>
+
+              {/* Floating Multimodal & Capabilities Menu (Matching Reference Screenshot) */}
+              {plusMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setPlusMenuOpen(false)}
+                  />
+                  <div className="absolute bottom-full left-0 mb-2.5 w-72 sm:w-80 z-50 rounded-2xl bg-[#FFFFFF] dark:bg-[#1E1D1B] border border-black/10 dark:border-white/12 shadow-2xl p-2 space-y-1 text-left">
+                    {/* 1. Add photos & files */}
+                    <div className="rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition-colors p-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlusMenuOpen(false);
+                          fileAttachInputRef.current?.click();
+                        }}
+                        className="w-full flex items-center gap-3 text-left cursor-pointer"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-amber-500/12 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                          <ImagePlus className="w-4.5 h-4.5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12.5px] font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                            Add photos & files
+                          </div>
+                          <div className="text-[11px] text-neutral-400 truncate">
+                            Upload from gallery or device
+                          </div>
+                        </div>
+                      </button>
+                      {/* Quick Direct Buttons: Galeri Foto vs Dokumen/Excel */}
+                      <div className="mt-2 pl-12 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPlusMenuOpen(false);
+                            galleryAttachInputRef.current?.click();
+                          }}
+                          className="px-2 py-1 rounded-xs bg-[#F3F1ED] dark:bg-[#2A2825] hover:bg-[#C65D3B] hover:text-white text-[10px] font-semibold transition-colors cursor-pointer"
+                        >
+                          Galeri Foto
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPlusMenuOpen(false);
+                            fileAttachInputRef.current?.click();
+                          }}
+                          className="px-2 py-1 rounded-xs bg-[#F3F1ED] dark:bg-[#2A2825] hover:bg-[#C65D3B] hover:text-white text-[10px] font-semibold transition-colors cursor-pointer"
+                        >
+                          File / Excel / PDF
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 2. Take a photo / camera */}
+                    <button
+                      type="button"
+                      onClick={handleOpenCameraModal}
+                      className="w-full p-2 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition-colors flex items-center gap-3 text-left cursor-pointer"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-blue-500/12 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                        <Camera className="w-4.5 h-4.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12.5px] font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                          Take a photo / camera
+                        </div>
+                        <div className="text-[11px] text-neutral-400 truncate">
+                          Capture image directly
+                        </div>
+                      </div>
+                    </button>
+
+                    <div className="my-1 border-t border-black/8 dark:border-white/10" />
+
+                    {/* 3. Web search */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setUseSearchGrounding(!useSearchGrounding);
+                        setPlusMenuOpen(false);
+                      }}
+                      className={`w-full p-2 rounded-xl transition-colors flex items-center justify-between gap-3 text-left cursor-pointer ${
+                        useSearchGrounding
+                          ? 'bg-cyan-500/10'
+                          : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-cyan-500/12 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+                          <Globe className="w-4.5 h-4.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[12.5px] font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                            Web search
+                          </div>
+                          <div className="text-[11px] text-neutral-400 truncate">
+                            Live web knowledge & news
+                          </div>
+                        </div>
+                      </div>
+                      {useSearchGrounding && (
+                        <Check className="w-4 h-4 text-cyan-600 shrink-0" />
+                      )}
+                    </button>
+
+                    {/* 4. Deep research & reasoning */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setUseDeepReasoning(!useDeepReasoning);
+                        setPlusMenuOpen(false);
+                      }}
+                      className={`w-full p-2 rounded-xl transition-colors flex items-center justify-between gap-3 text-left cursor-pointer ${
+                        useDeepReasoning
+                          ? 'bg-purple-500/10'
+                          : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-purple-500/12 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                          <Brain className="w-4.5 h-4.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[12.5px] font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                            Deep research & reasoning
+                          </div>
+                          <div className="text-[11px] text-neutral-400 truncate">
+                            Detailed step-by-step thinking
+                          </div>
+                        </div>
+                      </div>
+                      {useDeepReasoning && (
+                        <Check className="w-4 h-4 text-purple-600 shrink-0" />
+                      )}
+                    </button>
+
+                    {/* 5. Canvas & code preview */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        const nextCanvas = !useCanvasMode;
+                        setUseCanvasMode(nextCanvas);
+                        setPlusMenuOpen(false);
+                        if (nextCanvas && !activeArtifact) {
+                          // Find latest artifact in thread or create interactive pricing canvas preview
+                          const latestWithArtifact = [...activeThread.messages]
+                            .reverse()
+                            .map((m) => extractCodeArtifact(m.content))
+                            .find(Boolean);
+                          if (latestWithArtifact) {
+                            setActiveArtifact(latestWithArtifact);
+                          }
+                        }
+                      }}
+                      className={`w-full p-2 rounded-xl transition-colors flex items-center justify-between gap-3 text-left cursor-pointer ${
+                        useCanvasMode
+                          ? 'bg-emerald-500/10'
+                          : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                          <Palette className="w-4.5 h-4.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[12.5px] font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                            Canvas & code preview
+                          </div>
+                          <div className="text-[11px] text-neutral-400 truncate">
+                            Interactive live visual workspace
+                          </div>
+                        </div>
+                      </div>
+                      {useCanvasMode && (
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
+                    </button>
+
+                    {/* 6. Skills & personas */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setPlusMenuOpen(false);
+                        setIsRoleModalOpen(true);
+                      }}
+                      className="w-full p-2 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.05] transition-colors flex items-center justify-between gap-3 text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-rose-500/12 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                          <BookOpen className="w-4.5 h-4.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[12.5px] font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                            Skills & personas
+                          </div>
+                          <div className="text-[11px] text-neutral-400 truncate">
+                            Expert roles and prompt library
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
 
             <button
               type="button"
@@ -1004,7 +1625,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
                   handleSendMessage();
                 }
               }}
-              placeholder="Ketik pertanyaan Sheet Pricing, paste gambar (Ctrl+V), atau lampirkan file..."
+              placeholder="Ketik pertanyaan Sheet Pricing, paste gambar (Ctrl+V), atau klik (+) untuk foto/kamera/file..."
               className="flex-1 max-h-28 px-2.5 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B] resize-none"
             />
 
@@ -1030,6 +1651,91 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
           </div>
         </div>
       </div>
+
+      {/* LIVE CAMERA CAPTURE MODAL */}
+      {cameraModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-xl bg-[#FFFFFF] dark:bg-[#161311] border border-black/15 dark:border-white/15 shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-black/8 dark:border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-[#C65D3B]" />
+                <span className="text-xs font-display font-bold">
+                  Ambil Foto Langsung (Kamera)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseCameraModal}
+                className="p-1 text-neutral-400 hover:text-neutral-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {cameraError ? (
+                <div className="p-4 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-800 dark:text-amber-300 space-y-2 text-center">
+                  <p>{cameraError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCloseCameraModal();
+                      cameraNativeInputRef.current?.click();
+                    }}
+                    className="px-3 py-1.5 rounded-xs bg-[#C65D3B] text-white font-semibold cursor-pointer"
+                  >
+                    Buka Kamera Perangkat (Native)
+                  </button>
+                </div>
+              ) : (
+                <div className="relative rounded-lg overflow-hidden bg-black aspect-video flex items-center justify-center">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSwitchCameraFacing}
+                  className="px-3 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Putar Kamera</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCloseCameraModal();
+                      cameraNativeInputRef.current?.click();
+                    }}
+                    className="px-2.5 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] text-[11px] font-medium cursor-pointer"
+                  >
+                    Kamera HP
+                  </button>
+                  {!cameraError && (
+                    <button
+                      type="button"
+                      onClick={handleCaptureCameraPhoto}
+                      className="px-4 py-1.5 rounded-xs bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>Jepret Foto</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* RIGHT ARTIFACT LIVE PREVIEW PANEL */}
       {activeArtifact && (

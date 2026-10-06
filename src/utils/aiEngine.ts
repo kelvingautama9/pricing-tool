@@ -174,12 +174,23 @@ export interface ChatImageAttachment {
   previewUrl: string;
 }
 
+export interface ChatFileAttachment {
+  id: string;
+  name: string;
+  ext: string;
+  sizeLabel: string;
+  textContent?: string;
+  base64Data?: string;
+  mimeType?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   reasoning?: string;
   images?: ChatImageAttachment[];
+  files?: ChatFileAttachment[];
   createdAt: number;
   modelUsed?: string;
   isStreaming?: boolean;
@@ -298,6 +309,18 @@ export async function executeChatStream(
     params.contextWindow
   );
 
+  const formatMessageContentWithFiles = (m: ChatMessage): string => {
+    if (!m.files || m.files.length === 0) return m.content;
+    const fileBlocks = m.files
+      .filter((f) => f.textContent)
+      .map(
+        (f) =>
+          `\n\n[Attached File: ${f.name} (${f.sizeLabel})]\n\`\`\`${f.ext}\n${f.textContent}\n\`\`\``
+      )
+      .join('');
+    return `${m.content || 'Analisis file terlampir berikut:'}${fileBlocks}`;
+  };
+
   if (provider === 'gemini') {
     try {
       const response = await fetch('/api/gemini/stream', {
@@ -305,14 +328,25 @@ export async function executeChatStream(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages: budgetedMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            images: m.images?.map((img) => ({
-              mimeType: img.mimeType,
-              data: img.data,
-            })),
-          })),
+          messages: budgetedMessages.map((m) => {
+            const inlineMedia = [
+              ...(m.images?.map((img) => ({
+                mimeType: img.mimeType,
+                data: img.data,
+              })) || []),
+              ...(m.files
+                ?.filter((f) => f.base64Data && f.mimeType)
+                .map((f) => ({
+                  mimeType: f.mimeType!,
+                  data: f.base64Data!,
+                })) || []),
+            ];
+            return {
+              role: m.role,
+              content: formatMessageContentWithFiles(m),
+              images: inlineMedia.length > 0 ? inlineMedia : undefined,
+            };
+          }),
           systemInstruction: effectiveSystemInstruction,
           temperature: params.temperature,
           topP: params.topP,
@@ -395,7 +429,7 @@ export async function executeChatStream(
     { role: 'system', content: effectiveSystemInstruction },
     ...budgetedMessages.map((m) => ({
       role: m.role,
-      content: m.content,
+      content: formatMessageContentWithFiles(m),
     })),
   ];
 
