@@ -32,11 +32,33 @@ function isRecoverableModelError(errMsg: string): boolean {
   );
 }
 
+function resolveServerApiKey(): string {
+  const raw =
+    process.env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    '';
+  return raw.replace(/^["']|["']$/g, '').trim();
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method Not Allowed' });
     return;
   }
+
+  const parsedBody =
+    typeof req.body === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(req.body);
+          } catch {
+            return {};
+          }
+        })()
+      : req.body || {};
 
   const {
     model = 'gemini-3.8-flash',
@@ -45,7 +67,7 @@ export default async function handler(req: any, res: any) {
     temperature = 0.4,
     topP = 0.95,
     useSearchGrounding = false,
-  } = req.body || {};
+  } = parsedBody;
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -63,8 +85,19 @@ export default async function handler(req: any, res: any) {
   };
 
   try {
-    const apiKey =
-      process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+    const apiKey = resolveServerApiKey();
+    if (!apiKey) {
+      sendEvent({
+        type: 'error',
+        isMissingKey: true,
+        model,
+        message:
+          'Variabel GEMINI_API_KEY belum terbaca pada deployment Vercel ini. Karena Anda baru menambahkan GEMINI_API_KEY di Vercel Settings > Environment Variables, silakan buka tab "Deployments" di Vercel lalu klik titik tiga (...) > "Redeploy" (atau lakukan git push baru) agar kunci API aktif di server.',
+      });
+      res.end();
+      return;
+    }
+
     const ai = new GoogleGenAI({
       apiKey,
       httpOptions: {

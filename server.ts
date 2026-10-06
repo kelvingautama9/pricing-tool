@@ -45,8 +45,18 @@ async function startServer() {
 
   app.use(express.json({ limit: '15mb' }));
 
+  const resolveApiKey = () => {
+    const raw =
+      process.env.GEMINI_API_KEY ||
+      process.env.VITE_GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.API_KEY ||
+      '';
+    return raw.replace(/^["']|["']$/g, '').trim();
+  };
+
   const getGeminiClient = () => {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+    const apiKey = resolveApiKey();
     return new GoogleGenAI({
       apiKey,
       httpOptions: {
@@ -58,10 +68,7 @@ async function startServer() {
   };
 
   app.get('/api/gemini/status', (_req, res) => {
-    const hasKey = Boolean(
-      (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) ||
-        (process.env.VITE_GEMINI_API_KEY && process.env.VITE_GEMINI_API_KEY.trim())
-    );
+    const hasKey = Boolean(resolveApiKey());
     res.json({
       connected: hasKey,
       provider: 'gemini',

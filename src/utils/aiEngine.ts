@@ -1,6 +1,35 @@
+import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 import { buildUniversalSystemInstruction, estimateTokens } from './contextSniffer';
 
 export type AIProviderType = 'gemini' | 'qwen' | 'local';
+
+const GEMINI_FALLBACK_CHAIN = [
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+];
+
+function isRecoverableGeminiError(errMsg: string): boolean {
+  const lower = errMsg.toLowerCase();
+  return (
+    errMsg.includes('503') ||
+    errMsg.includes('429') ||
+    errMsg.includes('404') ||
+    errMsg.includes('500') ||
+    errMsg.includes('502') ||
+    errMsg.includes('504') ||
+    lower.includes('unavailable') ||
+    lower.includes('high demand') ||
+    lower.includes('overloaded') ||
+    lower.includes('resource_exhausted') ||
+    lower.includes('quota') ||
+    lower.includes('rate limit') ||
+    lower.includes('not found') ||
+    lower.includes('not supported')
+  );
+}
 
 export interface AIModelOption {
   id: string;
@@ -327,31 +356,121 @@ export async function executeChatStream(
   };
 
   if (provider === 'gemini') {
+    const formattedMessagesPayload = budgetedMessages.map((m) => {
+      const inlineMedia = [
+        ...(m.images?.map((img) => ({
+          mimeType: img.mimeType,
+          data: img.data,
+        })) || []),
+        ...(m.files
+          ?.filter((f) => f.base64Data && f.mimeType)
+          .map((f) => ({
+            mimeType: f.mimeType!,
+            data: f.base64Data!,
+          })) || []),
+      ];
+      return {
+        role: m.role,
+        content: formatMessageContentWithFiles(m),
+        images: inlineMedia.length > 0 ? inlineMedia : undefined,
+      };
+    });
+
+    const executeDirectSdkFallback = async (): Promise<boolean> => {
+      const envKey = (
+        process.env.GEMINI_API_KEY ||
+        (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GEMINI_API_KEY ||
+        ''
+      )
+        .replace(/^["']|["']$/g, '')
+        .trim();
+
+      if (!envKey) return false;
+
+      const ai = new GoogleGenAI({ apiKey: envKey });
+      const formattedContents = formattedMessagesPayload.map((m) => {
+        const parts: Array<
+          | { text: string }
+          | { inlineData: { mimeType: string; data: string } }
+        > = [];
+        if (Array.isArray(m.images)) {
+          for (const img of m.images) {
+            if (img.data && img.mimeType) {
+              parts.push({
+                inlineData: { mimeType: img.mimeType, data: img.data },
+              });
+            }
+          }
+        }
+        if (m.content) {
+          parts.push({ text: m.content });
+        } else if (parts.length === 0) {
+          parts.push({ text: ' ' });
+        }
+        return {
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts,
+        };
+      });
+
+      const candidateModels = [
+        model,
+        ...GEMINI_FALLBACK_CHAIN.filter((m) => m !== model),
+      ];
+
+      let lastErr: unknown = null;
+      for (let i = 0; i < candidateModels.length; i++) {
+        const candidate = candidateModels[i];
+        try {
+          if (i > 0) {
+            callbacks.onModelSwitched?.(candidateModels[i - 1], candidate);
+          }
+
+          const configObj: Record<string, unknown> = {
+            temperature: params.temperature,
+            topP: params.topP,
+          };
+          if (effectiveSystemInstruction.trim()) {
+            configObj.systemInstruction = effectiveSystemInstruction.trim();
+          }
+          if (i === 0 && params.useSearchGrounding) {
+            configObj.tools = [{ googleSearch: {} }];
+          }
+
+          const stream = await ai.models.generateContentStream({
+            model: candidate,
+            contents: formattedContents,
+            config: configObj,
+          });
+
+          for await (const chunk of stream) {
+            if (abortSignal.aborted) break;
+            const c = chunk as GenerateContentResponse;
+            if (c.text) {
+              callbacks.onChunk(c.text);
+            }
+          }
+          return true;
+        } catch (err: unknown) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!isRecoverableGeminiError(msg)) {
+            break;
+          }
+        }
+      }
+
+      if (lastErr) throw lastErr;
+      return false;
+    };
+
     try {
       const response = await fetch('/api/gemini/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
-          messages: budgetedMessages.map((m) => {
-            const inlineMedia = [
-              ...(m.images?.map((img) => ({
-                mimeType: img.mimeType,
-                data: img.data,
-              })) || []),
-              ...(m.files
-                ?.filter((f) => f.base64Data && f.mimeType)
-                .map((f) => ({
-                  mimeType: f.mimeType!,
-                  data: f.base64Data!,
-                })) || []),
-            ];
-            return {
-              role: m.role,
-              content: formatMessageContentWithFiles(m),
-              images: inlineMedia.length > 0 ? inlineMedia : undefined,
-            };
-          }),
+          messages: formattedMessagesPayload,
           systemInstruction: effectiveSystemInstruction,
           temperature: params.temperature,
           topP: params.topP,
@@ -361,6 +480,11 @@ export async function executeChatStream(
       });
 
       if (!response.ok || !response.body) {
+        const fallbackWorked = await executeDirectSdkFallback();
+        if (fallbackWorked) {
+          callbacks.onComplete();
+          return;
+        }
         throw new Error(`HTTP ${response.status}: Gagal menghubungi server AI.`);
       }
 
@@ -392,6 +516,13 @@ export async function executeChatStream(
             } else if (parsed.type === 'chunk' && parsed.text) {
               callbacks.onChunk(parsed.text);
             } else if (parsed.type === 'error') {
+              if (parsed.isMissingKey) {
+                const fallbackWorked = await executeDirectSdkFallback();
+                if (fallbackWorked) {
+                  callbacks.onComplete();
+                  return;
+                }
+              }
               const customErr = new Error(
                 parsed.message || 'Terjadi kesalahan pada eksekusi AI.'
               ) as Error & { isRateLimit?: boolean; model?: string };
