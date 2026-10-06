@@ -146,6 +146,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const messagesScrollContainerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileAttachInputRef = useRef<HTMLInputElement>(null);
   const galleryAttachInputRef = useRef<HTMLInputElement>(null);
@@ -243,12 +244,17 @@ ${masterTableRows}`;
     return msgTokens + sysTokens + draftTokens;
   }, [activeThread, activeRoleObj, inputText]);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (smooth = true) => {
+    const container = messagesScrollContainerRef.current;
+    if (!container) return;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
+    });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom(!isStreaming);
   }, [activeThread?.messages.length, isStreaming]);
 
   const formatFileSize = (bytes: number): string => {
@@ -759,7 +765,7 @@ ${masterTableRows}`;
 
   const handleSwitchToFlashLite = () => {
     triggerHaptic('medium');
-    const liteModel = 'gemini-3.1-flash-lite';
+    const liteModel = 'gemini-2.5-flash-lite';
     setSelectedModelId(liteModel);
     setRateLimitBanner({ active: false, failedModel: '' });
 
@@ -925,7 +931,7 @@ ${masterTableRows}`;
           processIncomingFiles(e.dataTransfer.files);
         }
       }}
-      className="h-[calc(100dvh-5.5rem)] w-full flex rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 overflow-hidden relative"
+      className="flex-1 min-h-0 h-full w-full flex rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 overflow-hidden relative"
     >
       {/* Drag & Drop Overlay */}
       {isDraggingOver && (
@@ -943,9 +949,9 @@ ${masterTableRows}`;
       )}
 
       {/* MAIN CHAT STAGE (No duplicate internal sidebar — managed via main left Sidebar) */}
-      <div className="flex-1 flex flex-col min-w-0 h-full bg-[#FFFFFF] dark:bg-[#161311]">
-        {/* Topbar Island: [Model Dropdown] [Role Library] [Server/Engine] */}
-        <div className="h-11 px-3 border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-2 shrink-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full bg-[#FFFFFF] dark:bg-[#161311]">
+        {/* Topbar Island: [Model Dropdown] [Role Library] [Server/Engine] — Pinned at top, never scrolls out */}
+        <div className="h-11 px-3 bg-[#FFFFFF] dark:bg-[#161311] border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-2 shrink-0 relative z-30">
           <div className="flex items-center gap-2 min-w-0">
             {/* Unified Floating Model & Provider Picker */}
             <div className="relative">
@@ -1085,7 +1091,7 @@ ${masterTableRows}`;
         </div>
 
         {/* Dynamic Context Sniffer Grounding Strip */}
-        <div className="px-3 py-1 bg-[#F9F9F9] dark:bg-[#1d1c1a] border-b border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-neutral-500">
+        <div className="px-3 py-1 bg-[#F9F9F9] dark:bg-[#1d1c1a] border-b border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-neutral-500 shrink-0 relative z-20">
           <div className="flex items-center gap-1.5 truncate">
             <Terminal className="w-3 h-3 text-[#C65D3B] shrink-0" />
             <span className="truncate">
@@ -1106,7 +1112,10 @@ ${masterTableRows}`;
         </div>
 
         {/* Messages Scroll Stage */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-3">
+        <div
+          ref={messagesScrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-3"
+        >
           {activeThread.messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-2 py-8">
               <div className="text-xs font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">

@@ -537,7 +537,7 @@ export default function App() {
           role: 'assistant',
           content: `Hi, i'm BlackEYE AI, how can i help you today...\n\nYou can ask me everything about Sheet Pricing`,
           createdAt: Date.now(),
-          modelUsed: 'gemini-3.8-flash',
+          modelUsed: 'gemini-2.5-flash',
         },
       ],
     };
@@ -774,9 +774,21 @@ export default function App() {
           </div>
         </header>
 
-        {/* Scrollable Main Content Viewport */}
-        <main className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6">
-          <div className="max-w-5xl mx-auto">
+        {/* Scrollable Main Content Viewport (Locked flex height when AI Chat is active so AI Header never scrolls away) */}
+        <main
+          className={
+            activeTab === 'ai'
+              ? 'flex-1 overflow-hidden p-2 sm:p-4 flex flex-col min-h-0'
+              : 'flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6'
+          }
+        >
+          <div
+            className={
+              activeTab === 'ai'
+                ? 'max-w-5xl w-full mx-auto flex-1 flex flex-col min-h-0'
+                : 'max-w-5xl mx-auto'
+            }
+          >
             {activeTab === 'ai' ? (
               <AIChatWorkspace
                 activeCalculation={calculationResult}

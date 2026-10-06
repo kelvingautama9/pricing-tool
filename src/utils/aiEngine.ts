@@ -4,11 +4,12 @@ import { buildUniversalSystemInstruction, estimateTokens } from './contextSniffe
 export type AIProviderType = 'gemini' | 'qwen' | 'local';
 
 const GEMINI_FALLBACK_CHAIN = [
-  'gemini-3.8-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
+  'gemini-flash-latest',
   'gemini-2.5-flash-lite',
+  'gemini-2.5-pro',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-pro-preview',
 ];
 
 function isRecoverableGeminiError(errMsg: string): boolean {
@@ -40,34 +41,34 @@ export interface AIModelOption {
 }
 
 export const AI_MODELS: AIModelOption[] = [
-  // Google Gemini Cloud (Full Model List matching reference)
+  // Google Gemini Cloud (Ordered by Speed, Anti-Hallucination Accuracy & Production Stability)
   {
     id: 'gemini-2.5-flash',
     name: 'gemini-2.5-flash',
     provider: 'gemini',
-    badge: 'Flagship Fast',
-    description: 'Model cepat serbaguna dengan keseimbangan kecepatan & akurasi',
+    badge: 'Default · Paling Stabil',
+    description: 'Rekomendasi Utama: Cepat, presisi matematika tinggi, anti-halu & stabil',
   },
   {
-    id: 'gemini-2.5-pro',
-    name: 'gemini-2.5-pro',
+    id: 'gemini-flash-latest',
+    name: 'gemini-flash-latest',
     provider: 'gemini',
-    badge: 'Flagship Pro',
-    description: 'Penalaran mendalam untuk analisis harga & arsitektur kompleks',
+    badge: 'Fallback #1 · Stable',
+    description: 'Alias rilis stabil terbaru keluarga Gemini Flash dengan kuota tinggi',
   },
   {
     id: 'gemini-2.5-flash-lite',
     name: 'gemini-2.5-flash-lite',
     provider: 'gemini',
-    badge: 'Ultra Lite',
-    description: 'Kecepatan instan, hemat kuota token & tahan rate-limit 429',
+    badge: 'Fallback #2 · Ultra Cepat',
+    description: 'Kecepatan instan, ringan, hemat kuota token & tahan rate-limit 429',
   },
   {
-    id: 'gemini-3.8-flash',
-    name: 'gemini-3.8-flash',
+    id: 'gemini-2.5-pro',
+    name: 'gemini-2.5-pro',
     provider: 'gemini',
-    badge: 'New 3.8',
-    description: 'Generasi 3.8 terbaru untuk kecepatan tinggi & akurasi presisi',
+    badge: 'Fallback #3 · Deep Pro',
+    description: 'Penalaran mendalam untuk audit harga multi-customer & rumus kompleks',
   },
   {
     id: 'gemini-3.1-flash-lite',
@@ -84,11 +85,11 @@ export const AI_MODELS: AIModelOption[] = [
     description: 'Model Pro generasi 3.1 untuk kalkulasi & kode tingkat lanjut',
   },
   {
-    id: 'gemini-flash-latest',
-    name: 'gemini-flash-latest',
+    id: 'gemini-3.8-flash',
+    name: 'gemini-3.8-flash',
     provider: 'gemini',
-    badge: 'Latest Stable',
-    description: 'Alias rilis stabil terbaru keluarga Gemini Flash',
+    badge: 'Experimental 3.8',
+    description: 'Eksperimental generasi 3.8 (otomatis fallback ke 2.5 Flash)',
   },
   // Qwen Cloud / OpenRouter
   {
@@ -262,7 +263,7 @@ export const INITIAL_AI_THREADS: ChatThread[] = [
         role: 'assistant',
         content: `Hi, i'm BlackEYE AI, how can i help you today...\n\nYou can ask me everything about Sheet Pricing`,
         createdAt: Date.now(),
-        modelUsed: 'gemini-3.8-flash',
+        modelUsed: 'gemini-2.5-flash',
       },
     ],
   },

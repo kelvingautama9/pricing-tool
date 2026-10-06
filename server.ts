@@ -10,13 +10,14 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Prioritized multi-model fallback chain for Gemini when a model hits 503/429/404
+// Prioritized multi-model fallback chain for Gemini (Fast, Accurate, Low-Hallucination, High-Quota first)
 const GEMINI_FALLBACK_CHAIN = [
-  'gemini-3.8-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
+  'gemini-flash-latest',
   'gemini-2.5-flash-lite',
+  'gemini-2.5-pro',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-pro-preview',
 ];
 
 function isRecoverableModelError(errMsg: string): boolean {
@@ -78,10 +79,10 @@ async function startServer() {
 
   app.post('/api/gemini/stream', async (req, res) => {
     const {
-      model = 'gemini-3.8-flash',
+      model = 'gemini-2.5-flash',
       messages = [],
       systemInstruction = '',
-      temperature = 0.4,
+      temperature = 0.2,
       topP = 0.95,
       useSearchGrounding = false,
     } = req.body || {};

@@ -5,11 +5,12 @@ export const config = {
 };
 
 const GEMINI_FALLBACK_CHAIN = [
-  'gemini-3.8-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
+  'gemini-flash-latest',
   'gemini-2.5-flash-lite',
+  'gemini-2.5-pro',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-pro-preview',
 ];
 
 function isRecoverableModelError(errMsg: string): boolean {
@@ -61,10 +62,10 @@ export default async function handler(req: any, res: any) {
       : req.body || {};
 
   const {
-    model = 'gemini-3.8-flash',
+    model = 'gemini-2.5-flash',
     messages = [],
     systemInstruction = '',
-    temperature = 0.4,
+    temperature = 0.2,
     topP = 0.95,
     useSearchGrounding = false,
   } = parsedBody;
