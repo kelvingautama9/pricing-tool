@@ -207,31 +207,28 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
     const customerRows = customers
       .map(
         (c, idx) =>
-          `${idx + 1}. ${c.name} (${c.tier}) — Diskon/Margin SW: ${
+          `${idx + 1}.${c.name}[${c.tier}|SW:${
             c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`
-          }, DW: ${
+          }|DW:${
             c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`
-          }`
+          }]`
       )
-      .join('\n');
+      .join('; ');
 
     const masterTableRows = BASE_PRICE_TABLE.map(
       (r) =>
-        `${r.no}. ${r.substance} — B/F: Rp ${r['B/F'].toLocaleString('id-ID')}, C/F: Rp ${r['C/F'].toLocaleString('id-ID')}, E/F: Rp ${r['E/F'].toLocaleString('id-ID')}, CB/F (DW): Rp ${r['CB/F'].toLocaleString('id-ID')}`
-    ).join('\n');
+        `${r.no}.${r.substance}(BF:${r['B/F']},CF:${r['C/F']},EF:${r['E/F']},CBF:${r['CB/F']})`
+    ).join('; ');
 
-    return `Total Customer Terdaftar/Diimpor: ${customers.length} Customer
-Distribusi Tier: Tier 1 = ${tierCounts['Tier 1']}, Tier 2 = ${tierCounts['Tier 2']}, Tier 3 = ${tierCounts['Tier 3']}, Tier 4 = ${tierCounts['Tier 4']}
-Customer yang Sedang Dipilih di Kalkulator: ${
+    return `Total Customer: ${customers.length} (Tier 1:${tierCounts['Tier 1']}, Tier 2:${tierCounts['Tier 2']}, Tier 3:${tierCounts['Tier 3']}, Tier 4:${tierCounts['Tier 4']})
+Customer Aktif di Kalkulator: ${
       activeCust
-        ? `${activeCust.name} (${activeCust.tier}, SW: ${activeCust.swMarginPercent}%, DW: ${activeCust.dwMarginPercent}%)`
-        : 'Manual / Tidak memilih customer spesifik'
+        ? `${activeCust.name} (${activeCust.tier}, SW:${activeCust.swMarginPercent}%, DW:${activeCust.dwMarginPercent}%)`
+        : 'Manual'
     }
-
-DAFTAR LENGKAP DATABASE CUSTOMER (No. Nama | Tier | Diskon/Margin SW | Diskon/Margin DW):
+DATABASE CUSTOMER (Format: No.Nama[Tier|SW:Margin|DW:Margin]):
 ${customerRows}
-
-TABEL MASTER HARGA DASAR 15 SUBSTANCE ACUAN (Single Wall - Ketebalan 125):
+TABEL MASTER 15 ACUAN (Rp/M²):
 ${masterTableRows}`;
   }, [customers, selectedCustomerId]);
 
@@ -673,8 +670,8 @@ ${masterTableRows}`;
 
       if (displayedText.length < targetText.length) {
         const backlog = targetText.length - displayedText.length;
-        // Fast & snappy adaptive step size: feels like ultra-responsive real-time generation
-        const step = Math.max(4, Math.min(64, Math.ceil(backlog / 3)));
+        // Ultra-snappy adaptive step size: instant response feel with zero lag behind network stream
+        const step = Math.max(8, Math.min(96, Math.ceil(backlog / 2)));
         displayedText = targetText.slice(0, displayedText.length + step);
 
         onUpdateThread((t) => ({
@@ -764,6 +761,7 @@ ${masterTableRows}`;
         activeCalculatorSnapshot: calculatorSnapshot,
         customerDatabaseSnapshot,
         useSearchGrounding,
+        useDeepReasoning,
       },
       controller.signal,
       {
@@ -787,9 +785,9 @@ ${masterTableRows}`;
           if (textDelta) targetText += textDelta;
           if (reasoningDelta) accumulatedReasoning += reasoningDelta;
 
-          // Immediately render the first incoming chunk so UI never gets stuck on "Menghasilkan respons..."
+          // Immediately render the first incoming chunk so UI responds in <1s
           if (wasEmpty && targetText.length > 0) {
-            displayedText = targetText.slice(0, Math.min(24, targetText.length));
+            displayedText = targetText.slice(0, Math.min(48, targetText.length));
             onUpdateThread((t) => ({
               ...t,
               messages: t.messages.map((m) =>
@@ -826,7 +824,7 @@ ${masterTableRows}`;
               ),
             }));
           } else {
-            // Fallback timer in case requestAnimationFrame is throttled by the browser
+            // Fast settle timer in case requestAnimationFrame is throttled by background tab
             setTimeout(() => {
               if (rafId !== null) cancelAnimationFrame(rafId);
               setIsStreaming(false);
@@ -846,7 +844,7 @@ ${masterTableRows}`;
               if (!userScrolledUpRef.current) {
                 scrollToBottom(false, false);
               }
-            }, 600);
+            }, 120);
           }
         },
         onError: (err) => {

@@ -86,6 +86,7 @@ export default async function handler(req: any, res: any) {
     temperature = 0.2,
     topP = 0.95,
     endpoint = 'https://openrouter.ai/api/v1/chat/completions',
+    useDeepReasoning = false,
   } = parsedBody;
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -110,10 +111,15 @@ export default async function handler(req: any, res: any) {
         ? endpoint
         : 'https://openrouter.ai/api/v1/chat/completions';
 
-    const candidateModels = [
-      model,
-      ...OPENROUTER_FALLBACK_CHAIN.filter((m) => m !== model),
-    ];
+    const shouldTryOpenRouter =
+      Boolean(apiKey) || !targetEndpoint.includes('openrouter.ai');
+
+    const candidateModels = shouldTryOpenRouter
+      ? [
+          model,
+          ...OPENROUTER_FALLBACK_CHAIN.filter((m) => m !== model),
+        ].slice(0, 3)
+      : [];
 
     let succeeded = false;
     let lastErrorMsg = 'Gagal menghubungi server OpenRouter.';
@@ -138,17 +144,31 @@ export default async function handler(req: any, res: any) {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
 
-      const upstreamRes = await fetch(targetEndpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: candidate,
-          messages,
-          temperature: Number(temperature),
-          top_p: Number(topP),
-          stream: true,
-        }),
-      });
+      const attemptController = new AbortController();
+      const timeoutId = setTimeout(() => attemptController.abort(), 5500);
+
+      let upstreamRes: Response;
+      try {
+        upstreamRes = await fetch(targetEndpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: candidate,
+            messages,
+            temperature: Number(temperature),
+            top_p: Number(topP),
+            stream: true,
+          }),
+          signal: attemptController.signal,
+        });
+      } catch (fetchErr: unknown) {
+        clearTimeout(timeoutId);
+        lastStatus = 408;
+        lastErrorMsg =
+          fetchErr instanceof Error ? fetchErr.message : 'Timeout OpenRouter';
+        continue;
+      }
+      clearTimeout(timeoutId);
 
       if (!upstreamRes.ok || !upstreamRes.body) {
         lastStatus = upstreamRes.status;
@@ -249,19 +269,26 @@ export default async function handler(req: any, res: any) {
               fromModel: model,
               toModel: backupModel,
             });
+            const rescueConfig: Record<string, unknown> = {
+              temperature: Number(temperature),
+              topP: Number(topP),
+              systemInstruction: systemMsg?.content
+                ? String(systemMsg.content)
+                : undefined,
+            };
+            if (
+              !useDeepReasoning &&
+              (backupModel.includes('2.5-flash') || backupModel.includes('flash-latest'))
+            ) {
+              rescueConfig.thinkingConfig = { thinkingBudget: 0 };
+            }
             const stream = await ai.models.generateContentStream({
               model: backupModel,
               contents:
                 formattedContents.length > 0
                   ? formattedContents
                   : [{ role: 'user', parts: [{ text: 'Halo' }] }],
-              config: {
-                temperature: Number(temperature),
-                topP: Number(topP),
-                systemInstruction: systemMsg?.content
-                  ? String(systemMsg.content)
-                  : undefined,
-              },
+              config: rescueConfig,
             });
             for await (const chunk of stream) {
               const c = chunk as GenerateContentResponse;

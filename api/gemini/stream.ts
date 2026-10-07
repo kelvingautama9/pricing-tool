@@ -69,6 +69,7 @@ export default async function handler(req: any, res: any) {
     temperature = 0.2,
     topP = 0.95,
     useSearchGrounding = false,
+    useDeepReasoning = false,
   } = parsedBody;
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -161,6 +162,13 @@ export default async function handler(req: any, res: any) {
 
       if (enableSearch) {
         configObj.tools = [{ googleSearch: {} }];
+      }
+
+      if (
+        !useDeepReasoning &&
+        (targetModel.includes('2.5-flash') || targetModel.includes('flash-latest'))
+      ) {
+        configObj.thinkingConfig = { thinkingBudget: 0 };
       }
 
       const responseStream = await ai.models.generateContentStream({

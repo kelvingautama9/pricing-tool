@@ -316,6 +316,7 @@ export interface AIExecutionParams {
   activeCalculatorSnapshot?: string;
   customerDatabaseSnapshot?: string;
   useSearchGrounding: boolean;
+  useDeepReasoning?: boolean;
 }
 
 export interface StreamCallbacks {
@@ -470,6 +471,12 @@ export async function executeChatStream(
           if (i === 0 && params.useSearchGrounding) {
             configObj.tools = [{ googleSearch: {} }];
           }
+          if (
+            !params.useDeepReasoning &&
+            (candidate.includes('2.5-flash') || candidate.includes('flash-latest'))
+          ) {
+            configObj.thinkingConfig = { thinkingBudget: 0 };
+          }
 
           const stream = await ai.models.generateContentStream({
             model: candidate,
@@ -509,6 +516,7 @@ export async function executeChatStream(
           temperature: params.temperature,
           topP: params.topP,
           useSearchGrounding: params.useSearchGrounding,
+          useDeepReasoning: Boolean(params.useDeepReasoning),
         }),
         signal: abortSignal,
       });
@@ -714,6 +722,7 @@ export async function executeChatStream(
           temperature: params.temperature,
           topP: params.topP,
           endpoint: serverConfig.qwenEndpoint,
+          useDeepReasoning: Boolean(params.useDeepReasoning),
         }),
         signal: abortSignal,
       });

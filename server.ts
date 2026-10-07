@@ -102,6 +102,7 @@ async function startServer() {
       temperature = 0.2,
       topP = 0.95,
       endpoint = 'https://openrouter.ai/api/v1/chat/completions',
+      useDeepReasoning = false,
     } = req.body || {};
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -134,10 +135,17 @@ async function startServer() {
           ? endpoint
           : 'https://openrouter.ai/api/v1/chat/completions';
 
-      const candidateModels = [
-        model,
-        ...OPENROUTER_FALLBACK_CHAIN.filter((m) => m !== model),
-      ];
+      // If no OpenRouter API key is configured on the server and user is using the default openrouter.ai endpoint,
+      // skip 6 guaranteed-401 network roundtrips and jump straight to the high-speed Gemini rescue engine!
+      const shouldTryOpenRouter =
+        Boolean(apiKey) || !targetEndpoint.includes('openrouter.ai');
+
+      const candidateModels = shouldTryOpenRouter
+        ? [
+            model,
+            ...OPENROUTER_FALLBACK_CHAIN.filter((m) => m !== model),
+          ].slice(0, 3) // Try at most 3 fast candidates so user never waits >3s
+        : [];
 
       let succeeded = false;
       let lastErrorMsg = 'Gagal menghubungi server OpenRouter.';
@@ -162,17 +170,31 @@ async function startServer() {
           headers['Authorization'] = `Bearer ${apiKey}`;
         }
 
-        const upstreamRes = await fetch(targetEndpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            model: candidate,
-            messages,
-            temperature: Number(temperature),
-            top_p: Number(topP),
-            stream: true,
-          }),
-        });
+        const attemptController = new AbortController();
+        const timeoutId = setTimeout(() => attemptController.abort(), 5500);
+
+        let upstreamRes: Response;
+        try {
+          upstreamRes = await fetch(targetEndpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              model: candidate,
+              messages,
+              temperature: Number(temperature),
+              top_p: Number(topP),
+              stream: true,
+            }),
+            signal: attemptController.signal,
+          });
+        } catch (fetchErr: unknown) {
+          clearTimeout(timeoutId);
+          lastStatus = 408;
+          lastErrorMsg =
+            fetchErr instanceof Error ? fetchErr.message : 'Timeout OpenRouter';
+          continue;
+        }
+        clearTimeout(timeoutId);
 
         if (!upstreamRes.ok || !upstreamRes.body) {
           lastStatus = upstreamRes.status;
@@ -277,19 +299,26 @@ async function startServer() {
                 fromModel: model,
                 toModel: backupModel,
               });
+              const rescueConfig: Record<string, unknown> = {
+                temperature: Number(temperature),
+                topP: Number(topP),
+                systemInstruction: systemMsg?.content
+                  ? String(systemMsg.content)
+                  : undefined,
+              };
+              if (
+                !useDeepReasoning &&
+                (backupModel.includes('2.5-flash') || backupModel.includes('flash-latest'))
+              ) {
+                rescueConfig.thinkingConfig = { thinkingBudget: 0 };
+              }
               const stream = await ai.models.generateContentStream({
                 model: backupModel,
                 contents:
                   formattedContents.length > 0
                     ? formattedContents
                     : [{ role: 'user', parts: [{ text: 'Halo' }] }],
-                config: {
-                  temperature: Number(temperature),
-                  topP: Number(topP),
-                  systemInstruction: systemMsg?.content
-                    ? String(systemMsg.content)
-                    : undefined,
-                },
+                config: rescueConfig,
               });
               for await (const chunk of stream) {
                 const c = chunk as GenerateContentResponse;
@@ -345,6 +374,7 @@ async function startServer() {
       temperature = 0.2,
       topP = 0.95,
       useSearchGrounding = false,
+      useDeepReasoning = false,
     } = req.body || {};
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -417,6 +447,14 @@ async function startServer() {
 
         if (enableSearch) {
           configObj.tools = [{ googleSearch: {} }];
+        }
+
+        // Sub-second TTFT optimization: disable internal hidden thinking delay on Flash models unless Deep Research is requested
+        if (
+          !useDeepReasoning &&
+          (targetModel.includes('2.5-flash') || targetModel.includes('flash-latest'))
+        ) {
+          configObj.thinkingConfig = { thinkingBudget: 0 };
         }
 
         const responseStream = await ai.models.generateContentStream({
