@@ -10,14 +10,23 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Prioritized multi-model fallback chain for Gemini (Fast, Accurate, Low-Hallucination, High-Quota first)
+// Production-hardened Gemini fallback chain: highest quota, lowest latency, zero experimental 404/preview bottlenecks
 const GEMINI_FALLBACK_CHAIN = [
   'gemini-2.5-flash',
-  'gemini-flash-latest',
   'gemini-2.5-flash-lite',
+  'gemini-flash-latest',
   'gemini-2.5-pro',
   'gemini-3.1-flash-lite',
   'gemini-3.1-pro-preview',
+];
+
+const OPENROUTER_FALLBACK_CHAIN = [
+  'openrouter/free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'nvidia/nemotron-3.5-lightning:free',
 ];
 
 function isRecoverableModelError(errMsg: string): boolean {
@@ -70,11 +79,262 @@ async function startServer() {
 
   app.get('/api/gemini/status', (_req, res) => {
     const hasKey = Boolean(resolveApiKey());
+    const hasOpenRouterKey = Boolean(
+      (
+        process.env.OPENROUTER_API_KEY ||
+        process.env.VITE_OPENROUTER_API_KEY ||
+        process.env.QWEN_API_KEY ||
+        ''
+      ).trim()
+    );
     res.json({
       connected: hasKey,
+      openRouterConnected: hasOpenRouterKey,
       provider: 'gemini',
       source: hasKey ? 'vercel_env' : 'none',
     });
+  });
+
+  app.post('/api/openrouter/stream', async (req, res) => {
+    const {
+      model = 'openrouter/free',
+      messages = [],
+      temperature = 0.2,
+      topP = 0.95,
+      endpoint = 'https://openrouter.ai/api/v1/chat/completions',
+    } = req.body || {};
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
+
+    const sendEvent = (payload: Record<string, unknown>) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      if (typeof (res as unknown as { flush?: () => void }).flush === 'function') {
+        (res as unknown as { flush: () => void }).flush();
+      }
+    };
+
+    try {
+      const apiKey = (
+        process.env.OPENROUTER_API_KEY ||
+        process.env.VITE_OPENROUTER_API_KEY ||
+        process.env.QWEN_API_KEY ||
+        ''
+      )
+        .replace(/^["']|["']$/g, '')
+        .trim();
+
+      const targetEndpoint =
+        endpoint && typeof endpoint === 'string' && endpoint.startsWith('http')
+          ? endpoint
+          : 'https://openrouter.ai/api/v1/chat/completions';
+
+      const candidateModels = [
+        model,
+        ...OPENROUTER_FALLBACK_CHAIN.filter((m) => m !== model),
+      ];
+
+      let succeeded = false;
+      let lastErrorMsg = 'Gagal menghubungi server OpenRouter.';
+      let lastStatus = 500;
+
+      for (let i = 0; i < candidateModels.length; i++) {
+        const candidate = candidateModels[i];
+        if (i > 0) {
+          sendEvent({
+            type: 'model_switched',
+            fromModel: candidateModels[i - 1],
+            toModel: candidate,
+          });
+        }
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
+          'X-Title': 'MYPAK Sheet Pricing Calculator',
+        };
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+
+        const upstreamRes = await fetch(targetEndpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: candidate,
+            messages,
+            temperature: Number(temperature),
+            top_p: Number(topP),
+            stream: true,
+          }),
+        });
+
+        if (!upstreamRes.ok || !upstreamRes.body) {
+          lastStatus = upstreamRes.status;
+          const errBody = await upstreamRes.text().catch(() => '');
+          lastErrorMsg = errBody || `HTTP ${upstreamRes.status}`;
+
+          if (
+            upstreamRes.status === 429 ||
+            upstreamRes.status === 502 ||
+            upstreamRes.status === 503 ||
+            upstreamRes.status === 504 ||
+            upstreamRes.status === 404 ||
+            isRecoverableModelError(lastErrorMsg)
+          ) {
+            continue;
+          } else {
+            break;
+          }
+        }
+
+        const reader = upstreamRes.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let receivedAnyChunk = false;
+        let streamErrorOccurred = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line.startsWith('data:')) continue;
+            const dataStr = line.replace(/^data:\s*/, '').trim();
+            if (dataStr === '[DONE]') break;
+
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.error) {
+                lastErrorMsg =
+                  parsed.error.message || JSON.stringify(parsed.error);
+                lastStatus = Number(parsed.error.code) || 503;
+                if (!receivedAnyChunk) {
+                  streamErrorOccurred = true;
+                  break;
+                }
+              }
+              const delta = parsed.choices?.[0]?.delta;
+              if (delta) {
+                const contentChunk = delta.content || '';
+                const reasoningChunk = delta.reasoning_content || '';
+                if (contentChunk || reasoningChunk) {
+                  receivedAnyChunk = true;
+                  sendEvent({
+                    type: 'chunk',
+                    text: contentChunk,
+                    reasoning: reasoningChunk || undefined,
+                    activeModel: candidate,
+                  });
+                }
+              }
+            } catch {
+              // Ignore malformed line
+            }
+          }
+
+          if (streamErrorOccurred) break;
+        }
+
+        if (streamErrorOccurred) {
+          if (isRecoverableModelError(lastErrorMsg) || lastStatus === 429 || lastStatus === 503) {
+            continue;
+          } else {
+            break;
+          }
+        }
+
+        succeeded = true;
+        break;
+      }
+
+      if (!succeeded) {
+        // Automatic cross-provider rescue using server Gemini client so OpenRouter tab works out-of-the-box even before OPENROUTER_API_KEY is added
+        const geminiKey = resolveApiKey();
+        if (geminiKey) {
+          const ai = getGeminiClient();
+          const systemMsg = messages.find((m: { role: string }) => m.role === 'system');
+          const chatMsgs = messages.filter((m: { role: string }) => m.role !== 'system');
+          const formattedContents = chatMsgs.map((m: { role: string; content: string }) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: String(m.content || ' ') }],
+          }));
+
+          for (const backupModel of GEMINI_FALLBACK_CHAIN) {
+            try {
+              sendEvent({
+                type: 'model_switched',
+                fromModel: model,
+                toModel: backupModel,
+              });
+              const stream = await ai.models.generateContentStream({
+                model: backupModel,
+                contents:
+                  formattedContents.length > 0
+                    ? formattedContents
+                    : [{ role: 'user', parts: [{ text: 'Halo' }] }],
+                config: {
+                  temperature: Number(temperature),
+                  topP: Number(topP),
+                  systemInstruction: systemMsg?.content
+                    ? String(systemMsg.content)
+                    : undefined,
+                },
+              });
+              for await (const chunk of stream) {
+                const c = chunk as GenerateContentResponse;
+                if (c.text) {
+                  sendEvent({
+                    type: 'chunk',
+                    text: c.text,
+                    activeModel: backupModel,
+                  });
+                }
+              }
+              succeeded = true;
+              break;
+            } catch {
+              // Try next Gemini model in chain
+            }
+          }
+        }
+      }
+
+      if (!succeeded) {
+        sendEvent({
+          type: 'error',
+          isRateLimit: lastStatus === 429 || lastStatus === 503,
+          model,
+          message: !apiKey
+            ? 'OPENROUTER_API_KEY belum dikonfigurasi di Environment Variables server/Vercel.'
+            : `Seluruh model OpenRouter sedang sibuk (${lastStatus}): ${lastErrorMsg.slice(0, 180)}`,
+        });
+        res.end();
+        return;
+      }
+
+      sendEvent({ type: 'done' });
+      res.end();
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      sendEvent({
+        type: 'error',
+        isRateLimit: errMsg.includes('429') || errMsg.includes('503'),
+        model,
+        message: errMsg,
+      });
+      res.end();
+    }
   });
 
   app.post('/api/gemini/stream', async (req, res) => {

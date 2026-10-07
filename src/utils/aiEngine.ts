@@ -5,11 +5,20 @@ export type AIProviderType = 'gemini' | 'qwen' | 'local';
 
 const GEMINI_FALLBACK_CHAIN = [
   'gemini-2.5-flash',
-  'gemini-flash-latest',
   'gemini-2.5-flash-lite',
+  'gemini-flash-latest',
   'gemini-2.5-pro',
   'gemini-3.1-flash-lite',
   'gemini-3.1-pro-preview',
+];
+
+const OPENROUTER_FALLBACK_CHAIN = [
+  'openrouter/free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'nvidia/nemotron-3.5-lightning:free',
 ];
 
 function isRecoverableGeminiError(errMsg: string): boolean {
@@ -41,27 +50,27 @@ export interface AIModelOption {
 }
 
 export const AI_MODELS: AIModelOption[] = [
-  // Google Gemini Cloud (Ordered by Speed, Anti-Hallucination Accuracy & Production Stability)
+  // Google Gemini Cloud (Ordered by Speed, Anti-Hallucination Accuracy, Quota Headroom & Production Stability)
   {
     id: 'gemini-2.5-flash',
     name: 'gemini-2.5-flash',
     provider: 'gemini',
     badge: 'Default · Paling Stabil',
-    description: 'Rekomendasi Utama: Cepat, presisi matematika tinggi, anti-halu & stabil',
-  },
-  {
-    id: 'gemini-flash-latest',
-    name: 'gemini-flash-latest',
-    provider: 'gemini',
-    badge: 'Fallback #1 · Stable',
-    description: 'Alias rilis stabil terbaru keluarga Gemini Flash dengan kuota tinggi',
+    description: 'Rekomendasi Utama: Cepat, presisi matematika tinggi, anti-halu & paling jarang error',
   },
   {
     id: 'gemini-2.5-flash-lite',
     name: 'gemini-2.5-flash-lite',
     provider: 'gemini',
-    badge: 'Fallback #2 · Ultra Cepat',
-    description: 'Kecepatan instan, ringan, hemat kuota token & tahan rate-limit 429',
+    badge: 'Fallback #1 · Anti-Limit',
+    description: 'Kuota RPM paling besar, respons instan & paling tahan antrean 429/503',
+  },
+  {
+    id: 'gemini-flash-latest',
+    name: 'gemini-flash-latest',
+    provider: 'gemini',
+    badge: 'Fallback #2 · Stable Alias',
+    description: 'Alias rilis produksi stabil terbaru keluarga Gemini Flash',
   },
   {
     id: 'gemini-2.5-pro',
@@ -74,37 +83,58 @@ export const AI_MODELS: AIModelOption[] = [
     id: 'gemini-3.1-flash-lite',
     name: 'gemini-3.1-flash-lite',
     provider: 'gemini',
-    badge: 'Next-Gen Lite',
+    badge: 'Fallback #4 · Next-Gen Lite',
     description: 'Model ringan generasi 3.1 dengan respons ultra cepat',
   },
   {
     id: 'gemini-3.1-pro-preview',
     name: 'gemini-3.1-pro-preview',
     provider: 'gemini',
-    badge: 'Next-Gen Pro',
+    badge: 'Fallback #5 · Next-Gen Pro',
     description: 'Model Pro generasi 3.1 untuk kalkulasi & kode tingkat lanjut',
   },
+  // OpenRouter Cloud (Live Verified 2026 Free Models + Auto-Router Fallback)
   {
-    id: 'gemini-3.8-flash',
-    name: 'gemini-3.8-flash',
-    provider: 'gemini',
-    badge: 'Experimental 3.8',
-    description: 'Eksperimental generasi 3.8 (otomatis fallback ke 2.5 Flash)',
-  },
-  // Qwen Cloud / OpenRouter
-  {
-    id: 'qwen/qwen-2.5-72b-instruct:free',
-    name: 'Qwen 2.5 72B Instruct',
+    id: 'openrouter/free',
+    name: 'OpenRouter Free Auto-Router',
     provider: 'qwen',
-    badge: '100% Free',
-    description: 'Model Qwen skala besar via OpenRouter / DashScope compatible',
+    badge: 'OpenRouter · Default',
+    description: 'Router cerdas OpenRouter: otomatis memilih model gratis yang sedang online & bebas antrean',
   },
   {
-    id: 'qwen/qwq-32b:free',
-    name: 'QwQ 32B Reasoning',
+    id: 'google/gemma-4-31b-it:free',
+    name: 'Google Gemma 4 31B IT',
     provider: 'qwen',
-    badge: 'Deep Thinking',
-    description: 'Penalaran bertahap Chain-of-Thought untuk logika matematika rumit',
+    badge: 'Fallback #1 · Gemma 4',
+    description: 'Model terbuka generasi 4 (31B) via OpenRouter — presisi & cepat',
+  },
+  {
+    id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    name: 'NVIDIA Nemotron 3 Ultra 550B',
+    provider: 'qwen',
+    badge: 'Fallback #2 · Ultra 550B',
+    description: 'Model skala besar NVIDIA 550B MoE untuk kalkulasi tabel & analisis harga',
+  },
+  {
+    id: 'nvidia/nemotron-3-super-120b-a12b:free',
+    name: 'NVIDIA Nemotron 3 Super 120B',
+    provider: 'qwen',
+    badge: 'Fallback #3 · Super 120B',
+    description: 'Model 120B MoE cepat & stabil untuk logika matematika dan diskon customer',
+  },
+  {
+    id: 'google/gemma-4-26b-a4b-it:free',
+    name: 'Google Gemma 4 26B MoE',
+    provider: 'qwen',
+    badge: 'Fallback #4 · Fast MoE',
+    description: 'Arsitektur aktif 4B yang sangat ringan dan responsif',
+  },
+  {
+    id: 'nvidia/nemotron-3.5-lightning:free',
+    name: 'NVIDIA Nemotron 3.5 Lightning',
+    provider: 'qwen',
+    badge: 'Fallback #5 · Ultra Cepat',
+    description: 'Kecepatan generasi token ultra tinggi via OpenRouter',
   },
   // Local LM Studio / Ollama
   {
@@ -556,12 +586,6 @@ export async function executeChatStream(
     return;
   }
 
-  // OpenAI-Compatible SSE Stream for Local (LM Studio / Ollama) or Qwen Cloud
-  const endpointUrl =
-    provider === 'local'
-      ? `${serverConfig.localEndpoint.replace(/\/+$/, '')}/v1/chat/completions`
-      : serverConfig.qwenEndpoint;
-
   const openAiMessages = [
     { role: 'system', content: effectiveSystemInstruction },
     ...budgetedMessages.map((m) => ({
@@ -569,6 +593,189 @@ export async function executeChatStream(
       content: formatMessageContentWithFiles(m),
     })),
   ];
+
+  // OpenRouter / Qwen Cloud with Server Proxy + Automatic 6-Model Fallback Chain
+  if (provider === 'qwen') {
+    const executeDirectOpenRouterFallback = async (): Promise<boolean> => {
+      const envKey = (
+        process.env.OPENROUTER_API_KEY ||
+        (import.meta as unknown as { env?: Record<string, string> }).env
+          ?.VITE_OPENROUTER_API_KEY ||
+        ''
+      )
+        .replace(/^["']|["']$/g, '')
+        .trim();
+
+      const targetEndpoint =
+        serverConfig.qwenEndpoint || 'https://openrouter.ai/api/v1/chat/completions';
+      const candidateModels = [
+        model,
+        ...OPENROUTER_FALLBACK_CHAIN.filter((m) => m !== model),
+      ];
+
+      let lastErr: Error | null = null;
+      for (let i = 0; i < candidateModels.length; i++) {
+        const candidate = candidateModels[i];
+        try {
+          if (i > 0) {
+            callbacks.onModelSwitched?.(candidateModels[i - 1], candidate);
+          }
+
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'HTTP-Referer': window.location.origin,
+            'X-Title': 'MYPAK Sheet Pricing Calculator',
+          };
+          if (envKey) {
+            headers['Authorization'] = `Bearer ${envKey}`;
+          }
+
+          const res = await fetch(targetEndpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              model: candidate,
+              messages: openAiMessages,
+              temperature: params.temperature,
+              top_p: params.topP,
+              stream: true,
+            }),
+            signal: abortSignal,
+          });
+
+          if (!res.ok || !res.body) {
+            const txt = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status}: ${txt || 'Endpoint sibuk'}`);
+          }
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const rawLine of lines) {
+              const line = rawLine.trim();
+              if (!line.startsWith('data:')) continue;
+              const dataStr = line.replace(/^data:\s*/, '').trim();
+              if (dataStr === '[DONE]') break;
+              try {
+                const parsed = JSON.parse(dataStr);
+                const delta = parsed.choices?.[0]?.delta;
+                if (delta) {
+                  const contentChunk = delta.content || '';
+                  const reasoningChunk = delta.reasoning_content || '';
+                  if (contentChunk || reasoningChunk) {
+                    callbacks.onChunk(contentChunk, reasoningChunk);
+                  }
+                }
+              } catch {
+                // Ignore
+              }
+            }
+          }
+          return true;
+        } catch (err: unknown) {
+          lastErr = err instanceof Error ? err : new Error(String(err));
+          if (!isRecoverableGeminiError(lastErr.message)) {
+            break;
+          }
+        }
+      }
+      if (lastErr) throw lastErr;
+      return false;
+    };
+
+    try {
+      const response = await fetch('/api/openrouter/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: openAiMessages,
+          temperature: params.temperature,
+          topP: params.topP,
+          endpoint: serverConfig.qwenEndpoint,
+        }),
+        signal: abortSignal,
+      });
+
+      if (!response.ok || !response.body) {
+        const worked = await executeDirectOpenRouterFallback();
+        if (worked) {
+          callbacks.onComplete();
+          return;
+        }
+        throw new Error(`HTTP ${response.status}: Gagal menghubungi server OpenRouter.`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith('data:')) continue;
+          const jsonStr = line.replace(/^data:\s*/, '').trim();
+          if (!jsonStr) continue;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.type === 'model_switched' && parsed.toModel) {
+              callbacks.onModelSwitched?.(
+                String(parsed.fromModel || model),
+                String(parsed.toModel)
+              );
+            } else if (parsed.type === 'chunk' && (parsed.text || parsed.reasoning)) {
+              callbacks.onChunk(parsed.text || '', parsed.reasoning);
+            } else if (parsed.type === 'error') {
+              const customErr = new Error(
+                parsed.message || 'Terjadi kesalahan pada eksekusi OpenRouter.'
+              ) as Error & { isRateLimit?: boolean; model?: string };
+              customErr.isRateLimit = Boolean(parsed.isRateLimit);
+              customErr.model = parsed.model || model;
+              throw customErr;
+            }
+          } catch (innerErr) {
+            if (innerErr instanceof Error && 'isRateLimit' in innerErr) {
+              throw innerErr;
+            }
+          }
+        }
+      }
+
+      callbacks.onComplete();
+    } catch (err: unknown) {
+      if ((err as Error)?.name === 'AbortError') {
+        callbacks.onComplete();
+        return;
+      }
+      const typedErr = (err instanceof Error
+        ? err
+        : new Error(String(err))) as Error & {
+        isRateLimit?: boolean;
+        model?: string;
+      };
+      callbacks.onError(typedErr);
+    }
+    return;
+  }
+
+  // OpenAI-Compatible SSE Stream for Local (LM Studio / Ollama)
+  const endpointUrl = `${serverConfig.localEndpoint.replace(/\/+$/, '')}/v1/chat/completions`;
 
   const attemptOpenAiStream = async (includeMaxTokens: boolean) => {
     const bodyPayload: Record<string, unknown> = {

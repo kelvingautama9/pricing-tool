@@ -1036,7 +1036,7 @@ ${masterTableRows}`;
                       {(
                         [
                           { id: 'gemini', label: 'Google Gemini' },
-                          { id: 'qwen', label: 'Qwen Cloud' },
+                          { id: 'qwen', label: 'OpenRouter' },
                           { id: 'local', label: 'Local LM' },
                         ] as const
                       ).map((tab) => (
@@ -2103,7 +2103,7 @@ ${masterTableRows}`;
                   {providerTab === 'gemini'
                     ? 'Pengaturan Server Google Gemini'
                     : providerTab === 'qwen'
-                    ? 'Pengaturan Server Qwen Cloud'
+                    ? 'Pengaturan Server OpenRouter / Qwen Cloud'
                     : 'Pengaturan Server Local LM Studio'}
                 </h3>
                 <p className="text-[10.5px] text-neutral-400 mt-0.5">
@@ -2124,7 +2124,7 @@ ${masterTableRows}`;
               {(
                 [
                   { id: 'gemini', label: 'Google Gemini' },
-                  { id: 'qwen', label: 'Qwen Cloud' },
+                  { id: 'qwen', label: 'OpenRouter' },
                   { id: 'local', label: 'Local LM' },
                 ] as const
               ).map((tab) => (
@@ -2151,11 +2151,11 @@ ${masterTableRows}`;
                     Status Koneksi Gemini Cloud
                   </span>
                   <span className="px-2 py-0.5 rounded-xs bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 font-mono text-[10px] font-semibold">
-                    Default Vercel / Server Aktif
+                    Default Server Aktif
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                  Website ini sudah otomatis terhubung ke environment server (<code className="font-mono text-[#C65D3B]">GEMINI_API_KEY</code>) dengan sistem <strong>Auto-Fallback 7 Model</strong>. Parameter presisi mengikuti <strong>Role Library</strong> (<code className="font-mono">Temp: {activeRoleObj.temperature ?? 0.2}</code>) dan jendela konteks dikelola otomatis oleh cloud.
+                  Terhubung ke environment server (<code className="font-mono text-[#C65D3B]">GEMINI_API_KEY</code>) dengan rantai <strong>Auto-Fallback 6 Model Paling Stabil</strong> (<code className="font-mono">2.5-flash</code> → <code className="font-mono">2.5-flash-lite</code> → <code className="font-mono">flash-latest</code> → <code className="font-mono">2.5-pro</code>).
                 </p>
                 <div className="text-[10.5px] font-mono text-neutral-400 pt-1 border-t border-black/6 dark:border-white/8 flex items-center justify-between">
                   <span>Model Aktif: <strong className="text-[#C65D3B]">{activeModelObj.name}</strong></span>
@@ -2164,9 +2164,22 @@ ${masterTableRows}`;
               </div>
             ) : providerTab === 'qwen' ? (
               <div className="space-y-2.5">
+                <div className="p-3 rounded-md bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/8 dark:border-white/10 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                      Status Koneksi OpenRouter Cloud
+                    </span>
+                    <span className="px-2 py-0.5 rounded-xs bg-cyan-600/15 text-cyan-700 dark:text-cyan-400 font-mono text-[10px] font-semibold">
+                      Auto-Fallback 6 Model
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                    Terintegrasi via endpoint <code className="font-mono text-[#C65D3B]">/api/openrouter/stream</code> dengan 6 model aktif OpenRouter (<code className="font-mono">openrouter/free</code> → <code className="font-mono">Gemma 4 31B</code> → <code className="font-mono">Nemotron 3 Ultra 550B</code> → <code className="font-mono">Nemotron 3 Super 120B</code>) serta <strong>Cross-Provider Auto-Rescue</strong> ke Gemini 2.5 Flash jika jaringan OpenRouter sedang penuh.
+                  </p>
+                </div>
                 <div>
                   <label className="block text-[11px] font-medium mb-1">
-                    Endpoint Qwen Cloud / OpenRouter Compatible
+                    Endpoint OpenRouter / Compatible Gateway
                   </label>
                   <input
                     type="text"
@@ -2181,9 +2194,6 @@ ${masterTableRows}`;
                     className="w-full px-2.5 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 font-mono text-[11px]"
                   />
                 </div>
-                <p className="text-[10.5px] text-neutral-400 leading-relaxed">
-                  Parameter presisi Qwen Cloud otomatis mengikuti konfigurasi <strong>Role Library</strong> yang aktif (<code className="font-mono">Temp: {activeRoleObj.temperature ?? 0.2}</code>).
-                </p>
               </div>
             ) : (
               <div className="space-y-3">

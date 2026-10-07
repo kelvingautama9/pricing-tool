@@ -17,10 +17,23 @@ export default defineConfig(({mode}) => {
     .replace(/^["']|["']$/g, '')
     .trim();
 
+  const resolvedOpenRouterKey = (
+    env.OPENROUTER_API_KEY ||
+    env.VITE_OPENROUTER_API_KEY ||
+    env.QWEN_API_KEY ||
+    process.env.OPENROUTER_API_KEY ||
+    process.env.VITE_OPENROUTER_API_KEY ||
+    process.env.QWEN_API_KEY ||
+    ''
+  )
+    .replace(/^["']|["']$/g, '')
+    .trim();
+
   return {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(resolvedGeminiKey),
+      'process.env.OPENROUTER_API_KEY': JSON.stringify(resolvedOpenRouterKey),
     },
     resolve: {
       alias: {
