@@ -71,14 +71,14 @@ export const OUTER_LAYER_OPTIONS: Array<{
   group: 'Medium' | 'Kraft';
   tag: string;
 }> = [
-  { id: 'M100', name: 'M100', group: 'Medium', tag: 'SW -4% · DW -2.5%' },
-  { id: 'M110', name: 'M110', group: 'Medium', tag: 'SW -2.5% · DW -1.5%' },
+  { id: 'M100', name: 'M100', group: 'Medium', tag: '-4% / -2.5%' },
+  { id: 'M110', name: 'M110', group: 'Medium', tag: '-2.5% / -1.5%' },
   { id: 'M125', name: 'M125', group: 'Medium', tag: 'Base' },
-  { id: 'M135', name: 'M135', group: 'Medium', tag: '+300 / -2% (-1% DW)' },
+  { id: 'M135', name: 'M135', group: 'Medium', tag: '+300 · -2%/-1%' },
   { id: 'M150', name: 'M150', group: 'Medium', tag: '+300' },
-  { id: 'K110', name: 'K110', group: 'Kraft', tag: 'SW -2.5% · DW -1.5%' },
+  { id: 'K110', name: 'K110', group: 'Kraft', tag: '-2.5% / -1.5%' },
   { id: 'K125', name: 'K125', group: 'Kraft', tag: 'Base' },
-  { id: 'K135', name: 'K135', group: 'Kraft', tag: 'SW -2% · DW -1%' },
+  { id: 'K135', name: 'K135', group: 'Kraft', tag: '-2% / -1%' },
   { id: 'K150', name: 'K150', group: 'Kraft', tag: 'Base' },
   { id: 'K200', name: 'K200', group: 'Kraft', tag: 'Base' },
   { id: 'K275', name: 'K275', group: 'Kraft', tag: '+2%' },
@@ -90,14 +90,14 @@ export const MID_LAYER_OPTIONS: Array<{
   group: 'Medium' | 'Kraft';
   tag: string;
 }> = [
-  { id: 'M100', name: 'M100', group: 'Medium', tag: 'SW -4% · DW -2.5%' },
-  { id: 'M110', name: 'M110', group: 'Medium', tag: 'SW -2.5% · DW -1.5%' },
+  { id: 'M100', name: 'M100', group: 'Medium', tag: '-4% / -2.5%' },
+  { id: 'M110', name: 'M110', group: 'Medium', tag: '-2.5% / -1.5%' },
   { id: 'M125', name: 'M125', group: 'Medium', tag: 'Base' },
-  { id: 'M135', name: 'M135', group: 'Medium', tag: '+300 / -2% (-1% DW)' },
+  { id: 'M135', name: 'M135', group: 'Medium', tag: '+300 · -2%/-1%' },
   { id: 'M150', name: 'M150', group: 'Medium', tag: '+300' },
   { id: 'K150', name: 'K150', group: 'Kraft', tag: '+2.000' },
   { id: 'K200', name: 'K200', group: 'Kraft', tag: '+2.000' },
-  { id: 'K275', name: 'K275', group: 'Kraft', tag: '+3.700 / +2%' },
+  { id: 'K275', name: 'K275', group: 'Kraft', tag: '+3.700 · +2%' },
 ];
 
 // Flute Options: B/F, C/F, E/F (Single Wall 3-Layer) & CB/F (Double Wall 5-Layer)
@@ -110,7 +110,7 @@ export const FLUTE_OPTIONS: Array<{
   { id: 'B/F', name: 'B/F', tag: 'SW', supported: true },
   { id: 'C/F', name: 'C/F', tag: 'SW', supported: true },
   { id: 'E/F', name: 'E/F', tag: '+2%', supported: true },
-  { id: 'CB/F', name: 'CB/F', tag: 'DW 5-Layer', supported: true },
+  { id: 'CB/F', name: 'CB/F', tag: 'DW', supported: true },
 ];
 
 export type CustomerTier = 'Tier 1' | 'Tier 2' | 'Tier 3' | 'Tier 4';

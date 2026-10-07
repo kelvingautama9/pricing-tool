@@ -918,56 +918,56 @@ export default function App() {
 
                       {/* Conditional Layer Dropdowns: 5 Dropdowns for Double Wall (CB/F) vs 3 Dropdowns for Single Wall */}
                       {flute === 'CB/F' ? (
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between text-[10.5px] font-mono text-[#C65D3B]">
-                            <span>Mode Double Wall (CB/F · 5 Layer: Top / Flute 1 / Mid / Flute 2 / Bottom)</span>
-                            <span>Acuan: {topLayer}/M125/{botLayer}</span>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
-                            <CustomPopoverDropdown
-                              label="Top"
-                              value={topLayer}
-                              options={OUTER_LAYER_OPTIONS}
-                              groups={['Medium', 'Kraft']}
-                              onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
-                            />
+                        <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                          <CustomPopoverDropdown
+                            label="Top"
+                            compact
+                            value={topLayer}
+                            options={OUTER_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
+                          />
 
-                            <CustomPopoverDropdown
-                              label="Flute 1"
-                              value={flute1Layer}
-                              options={MID_LAYER_OPTIONS}
-                              groups={['Medium', 'Kraft']}
-                              warningNote="Inner Layer: Tanpa K110, K125, K135."
-                              onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
-                            />
+                          <CustomPopoverDropdown
+                            label="Flute 1"
+                            compact
+                            value={flute1Layer}
+                            options={MID_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            warningNote="Inner Layer: Tanpa K110, K125, K135."
+                            onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
+                          />
 
-                            <CustomPopoverDropdown
-                              label="Mid"
-                              value={midLayer}
-                              options={MID_LAYER_OPTIONS}
-                              groups={['Medium', 'Kraft']}
-                              warningNote="Inner Layer: Tanpa K110, K125, K135."
-                              onChange={(val) => setMidLayer(val as MidLayerMaterial)}
-                            />
+                          <CustomPopoverDropdown
+                            label="Mid"
+                            compact
+                            value={midLayer}
+                            options={MID_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            warningNote="Inner Layer: Tanpa K110, K125, K135."
+                            onChange={(val) => setMidLayer(val as MidLayerMaterial)}
+                          />
 
-                            <CustomPopoverDropdown
-                              label="Flute 2"
-                              value={flute2Layer}
-                              options={MID_LAYER_OPTIONS}
-                              groups={['Medium', 'Kraft']}
-                              warningNote="Inner Layer: Tanpa K110, K125, K135."
-                              onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
-                            />
+                          <CustomPopoverDropdown
+                            label="Flute 2"
+                            compact
+                            value={flute2Layer}
+                            options={MID_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            align="right"
+                            warningNote="Inner Layer: Tanpa K110, K125, K135."
+                            onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
+                          />
 
-                            <CustomPopoverDropdown
-                              label="Bottom"
-                              value={botLayer}
-                              options={OUTER_LAYER_OPTIONS}
-                              groups={['Medium', 'Kraft']}
-                              align="right"
-                              onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
-                            />
-                          </div>
+                          <CustomPopoverDropdown
+                            label="Bottom"
+                            compact
+                            value={botLayer}
+                            options={OUTER_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            align="right"
+                            onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
+                          />
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1024,7 +1024,7 @@ export default function App() {
                                   triggerHaptic('medium');
                                   setFlute(fOpt.id);
                                 }}
-                                className={`py-2 px-2.5 rounded-md font-mono text-xs font-semibold border transition-all duration-150 cursor-pointer flex items-center justify-center gap-1 ${
+                                className={`py-2 px-2 rounded-md font-mono text-xs font-semibold border transition-all duration-150 cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap ${
                                   isSelected
                                     ? 'bg-[#C65D3B] border-[#C65D3B] text-white'
                                     : 'bg-[#FFFFFF] dark:bg-[#161311] border-black/10 dark:border-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] hover:bg-neutral-50 dark:hover:bg-[#1e1b18]'
@@ -1051,21 +1051,21 @@ export default function App() {
                       {/* Diskon / Margin (%) + Inline Customer Database Picker */}
                       <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-2">
                         <div className="flex items-baseline justify-between gap-2">
-                          <label className="text-xs font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tracking-tight">
+                          <label className="text-xs font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tracking-tight shrink-0">
                             Diskon / Margin (%)
                           </label>
-                          <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums text-right">
+                          <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums text-right truncate">
                             {currentInput.marginPercent < 0
                               ? `Potongan Harga (${currentInput.marginPercent}%)`
                               : currentInput.marginPercent > 0
                               ? `Mark-Up Harga (+${currentInput.marginPercent}%)`
                               : 'Harga Normal (0%)'}
                             {activeCustomer && customerMarginResolution
-                              ? ` · ${customerMarginResolution.modeLabel} (SW: ${
-                                  activeCustomer.swMarginPercent > 0 ? '+' : ''
-                                }${activeCustomer.swMarginPercent}% | 275/EF: ${
-                                  activeCustomer.dwMarginPercent > 0 ? '+' : ''
-                                }${activeCustomer.dwMarginPercent}%)`
+                              ? ` · ${
+                                  customerMarginResolution.usedCustomer275OrEfRate
+                                    ? 'Acuan 275/EF Customer'
+                                    : 'Acuan SW Customer'
+                                }`
                               : ''}
                           </span>
                         </div>
@@ -1376,7 +1376,11 @@ export default function App() {
                           </button>
 
                           {showOrderBreakdown && (
-                            <BreakdownTypewriter result={calculationResult} />
+                            <BreakdownTypewriter
+                              result={calculationResult}
+                              customer={activeCustomer}
+                              customerMarginResolution={customerMarginResolution}
+                            />
                           )}
                         </div>
 

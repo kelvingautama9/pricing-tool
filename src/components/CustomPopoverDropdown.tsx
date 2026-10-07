@@ -19,6 +19,7 @@ interface CustomPopoverDropdownProps {
   groups?: string[];
   warningNote?: string;
   align?: 'left' | 'right';
+  compact?: boolean;
 }
 
 export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
@@ -30,6 +31,7 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
   groups,
   warningNote,
   align = 'left',
+  compact = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('ALL');
@@ -81,10 +83,14 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className="relative w-full min-w-0">
       {/* Field Header */}
       <div className="flex items-baseline justify-between mb-1">
-        <label className="text-xs font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tracking-tight">
+        <label
+          className={`${
+            compact ? 'text-[10.5px]' : 'text-xs'
+          } font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tracking-tight whitespace-nowrap truncate`}
+        >
           {label}
         </label>
         {subLabel && (
@@ -101,32 +107,40 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
           triggerHaptic('light');
           setIsOpen(!isOpen);
         }}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-[#FFFFFF] dark:bg-[#161311] hover:bg-neutral-50 dark:hover:bg-[#1e1b18] border text-left transition-all duration-150 ease-out active:scale-[0.99] cursor-pointer select-none ${
+        className={`w-full flex items-center justify-between ${
+          compact ? 'gap-1 px-2 py-2' : 'gap-2 px-3 py-2'
+        } rounded-md bg-[#FFFFFF] dark:bg-[#161311] hover:bg-neutral-50 dark:hover:bg-[#1e1b18] border text-left transition-all duration-150 ease-out active:scale-[0.99] cursor-pointer select-none ${
           isOpen
             ? 'border-[#C65D3B] ring-1 ring-[#C65D3B]/30'
             : 'border-black/10 dark:border-white/10'
         }`}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className={`flex items-center ${compact ? 'gap-1.5' : 'gap-2'} min-w-0`}>
           <span
             className={`w-2 h-2 rounded-xs shrink-0 ${getIndicatorColor(
               selectedOption?.id || value,
               selectedOption?.supported
             )}`}
           />
-          <span className="font-mono font-semibold text-sm text-[#1C1B1A] dark:text-[#F2EFE9] truncate">
+          <span
+            className={`font-mono font-semibold ${
+              compact ? 'text-xs' : 'text-sm'
+            } text-[#1C1B1A] dark:text-[#F2EFE9] whitespace-nowrap`}
+          >
             {selectedOption?.id || value}
           </span>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {selectedOption?.tag && (
-            <span className="text-[10.5px] font-mono text-neutral-400 dark:text-neutral-500">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {!compact && selectedOption?.tag && (
+            <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 whitespace-nowrap">
               {selectedOption.tag}
             </span>
           )}
           <ChevronDown
-            className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-150 ${
+            className={`${
+              compact ? 'w-3 h-3' : 'w-3.5 h-3.5'
+            } text-neutral-400 transition-transform duration-150 ${
               isOpen ? 'rotate-180 text-[#C65D3B]' : ''
             }`}
           />
