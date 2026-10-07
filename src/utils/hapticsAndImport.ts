@@ -61,7 +61,7 @@ export function triggerHaptic(type: 'light' | 'medium' | 'success' = 'light'): v
 
 /**
  * Generate Sample Markdown (.md) Template for Customer Discount Database
- * Aligned with 5-column structure: No | Nama Customer | Tier | SW (%) | DW (%)
+ * Aligned with 5-column structure: No | Nama Customer | Tier | Diskon SW | 275 / E Flute
  */
 export function generateCustomerTemplateMarkdown(): string {
   return `# Template Database Diskon Customer — MYPAK Sheet Pricing Calculator
@@ -70,15 +70,15 @@ export function generateCustomerTemplateMarkdown(): string {
 - **Kolom A (No):** Nomor urut (1, 2, 3, dst.)
 - **Kolom B (Nama Customer):** Nama PT / CV / Klien
 - **Kolom C (Tier):** Pilih **Tier 1**, **Tier 2**, **Tier 3**, atau **Tier 4**
-- **Kolom D (Diskon SW):** Persentase Single Wall (contoh: \`+9%\` atau \`-4.5%\`)
-- **Kolom E (Diskon DW):** Persentase Double Wall (contoh: \`+13%\` atau \`+5%\`)
+- **Kolom D (Diskon SW):** Persentase Reguler / Single Wall (contoh: \`+9%\` atau \`-4.5%\`)
+- **Kolom E (275 / E Flute):** Persentase khusus saat spek memakai bahan 275 atau E-Flute (contoh: \`+11%\` atau \`-2.5%\`, sudah termasuk +2% sesuai ketentuan sales)
 
-| No | Nama Customer | Tier | Diskon SW | Diskon DW |
+| No | Nama Customer | Tier | Diskon SW | 275 / E Flute |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | PT Vinns Carton | Tier 1 | +9% | +13% |
-| 2 | PT Contoh Mitra Kemasan | Tier 2 | -3.5% | +5% |
-| 3 | CV Contoh Box Nusantara | Tier 3 | +7.5% | +11% |
-| 4 | UD Contoh Pack Mandiri | Tier 4 | +10% | +14% |
+| 1 | PT Vinns Carton | Tier 1 | +9% | +11% |
+| 2 | PT Contoh Mitra Kemasan | Tier 2 | -3.5% | -1.5% |
+| 3 | CV Contoh Box Nusantara | Tier 3 | +7.5% | +9.5% |
+| 4 | UD Contoh Pack Mandiri | Tier 4 | +10% | +12% |
 `;
 }
 
@@ -103,11 +103,11 @@ export function downloadCustomerTemplateMd(): void {
 export function downloadCustomerTemplateExcel(): void {
   triggerHaptic('medium');
   const rows = [
-    ['No', 'Nama Customer', 'Tier', 'Diskon SW', 'Diskon DW'],
-    [1, 'PT Vinns Carton', 'Tier 1', '+9%', '+13%'],
-    [2, 'PT Contoh Mitra Kemasan', 'Tier 2', '-3.5%', '+5%'],
-    [3, 'CV Contoh Box Nusantara', 'Tier 3', '+7.5%', '+11%'],
-    [4, 'UD Contoh Pack Mandiri', 'Tier 4', '+10%', '+14%'],
+    ['No', 'Nama Customer', 'Tier', 'Diskon SW', '275 / E Flute'],
+    [1, 'PT Vinns Carton', 'Tier 1', '+9%', '+11%'],
+    [2, 'PT Contoh Mitra Kemasan', 'Tier 2', '-3.5%', '-1.5%'],
+    [3, 'CV Contoh Box Nusantara', 'Tier 3', '+7.5%', '+9.5%'],
+    [4, 'UD Contoh Pack Mandiri', 'Tier 4', '+10%', '+12%'],
   ];
 
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
@@ -116,7 +116,7 @@ export function downloadCustomerTemplateExcel(): void {
     { wch: 28 }, // Kolom B: Nama Customer
     { wch: 12 }, // Kolom C: Tier
     { wch: 14 }, // Kolom D: Diskon SW
-    { wch: 14 }, // Kolom E: Diskon DW
+    { wch: 16 }, // Kolom E: 275 / E Flute
   ];
 
   const workbook = XLSX.utils.book_new();
@@ -128,9 +128,9 @@ export function downloadCustomerTemplateExcel(): void {
  * Parse Excel (.xlsx, .xls, .ods) ArrayBuffer with exact Column A-E mapping:
  * Kolom A (idx 0): Nomor
  * Kolom B (idx 1): Nama Customer
- * Kolom C (idx 2): Tier (Tier 1 / Tier 2 / Tier 3)
+ * Kolom C (idx 2): Tier (Tier 1 / Tier 2 / Tier 3 / Tier 4)
  * Kolom D (idx 3): Diskon SW
- * Kolom E (idx 4): Diskon DW
+ * Kolom E (idx 4): 275 / E Flute (Jika kosong di file, otomatis diisi Smart Default = SW + 2%)
  */
 export function parseCustomerExcelBuffer(buffer: ArrayBuffer): CustomerDiscountItem[] {
   try {
@@ -164,12 +164,15 @@ export function parseCustomerExcelBuffer(buffer: ArrayBuffer): CustomerDiscountI
         continue;
       }
 
-      // Support standard 5-column layout (A=No, B=Nama, C=Tier, D=SW, E=DW)
+      // Support standard 5-column layout (A=No, B=Nama, C=Tier, D=SW, E=275/E-Flute)
       if (row.length >= 5 && colB.length > 0) {
         const name = colB;
         const tier = normalizeTier(String(row[2] ?? 'Tier 1'));
         const swMarginPercent = parsePercentNumber(String(row[3] ?? '0'));
-        const dwMarginPercent = parsePercentNumber(String(row[4] ?? '0'));
+        const rawColE = String(row[4] ?? '').trim();
+        const dwMarginPercent = rawColE
+          ? parsePercentNumber(rawColE)
+          : Number((swMarginPercent + 2).toFixed(2));
 
         results.push({
           id: `cust-xls-${Date.now()}-${i}`,
@@ -180,12 +183,17 @@ export function parseCustomerExcelBuffer(buffer: ArrayBuffer): CustomerDiscountI
         });
       } else if (row.length === 4 && colA.length > 0 && isNaN(Number(colA))) {
         // Fallback if user omitted Column A (Nomor) and started directly with Nama Customer in Col A
+        const swMarginPercent = parsePercentNumber(String(row[2] ?? '0'));
+        const rawColD = String(row[3] ?? '').trim();
+        const dwMarginPercent = rawColD
+          ? parsePercentNumber(rawColD)
+          : Number((swMarginPercent + 2).toFixed(2));
         results.push({
           id: `cust-xls-${Date.now()}-${i}`,
           name: colA,
           tier: normalizeTier(colB),
-          swMarginPercent: parsePercentNumber(String(row[2] ?? '0')),
-          dwMarginPercent: parsePercentNumber(String(row[3] ?? '0')),
+          swMarginPercent,
+          dwMarginPercent,
         });
       }
     }
@@ -214,13 +222,21 @@ export function parseCustomerImportFile(rawText: string): CustomerDiscountItem[]
         : [];
       return arr
         .filter((item: unknown) => typeof item === 'object' && item !== null && 'name' in item)
-        .map((item: Record<string, unknown>, idx: number) => ({
-          id: `cust-imp-${Date.now()}-${idx}`,
-          name: String(item.name || '').trim(),
-          tier: normalizeTier(String(item.tier || 'Tier 1')),
-          swMarginPercent: parsePercentNumber(String(item.swMarginPercent ?? item.sw ?? '0')),
-          dwMarginPercent: parsePercentNumber(String(item.dwMarginPercent ?? item.dw ?? '0')),
-        }))
+        .map((item: Record<string, unknown>, idx: number) => {
+          const swMarginPercent = parsePercentNumber(String(item.swMarginPercent ?? item.sw ?? '0'));
+          const raw275 = item.dwMarginPercent ?? item.ef275MarginPercent ?? item['275_ef'] ?? item.dw;
+          const dwMarginPercent =
+            raw275 !== undefined && String(raw275).trim() !== ''
+              ? parsePercentNumber(String(raw275))
+              : Number((swMarginPercent + 2).toFixed(2));
+          return {
+            id: `cust-imp-${Date.now()}-${idx}`,
+            name: String(item.name || '').trim(),
+            tier: normalizeTier(String(item.tier || 'Tier 1')),
+            swMarginPercent,
+            dwMarginPercent,
+          };
+        })
         .filter((c: CustomerDiscountItem) => c.name.length > 0);
     } catch {
       // Fall through to Markdown/CSV parser
@@ -234,7 +250,7 @@ export function parseCustomerImportFile(rawText: string): CustomerDiscountItem[]
     const line = lines[i].trim();
     if (!line || line.startsWith('#') || line.startsWith('>')) continue;
 
-    // 2. Markdown Table Row: | 1 | PT Vinns Carton | Tier 1 | +9% | +13% | OR | PT Vinns Carton | Tier 1 | +9% | +13% |
+    // 2. Markdown Table Row: | 1 | PT Vinns Carton | Tier 1 | +9% | +11% |
     if (line.includes('|')) {
       const cells = line
         .split('|')
@@ -260,51 +276,63 @@ export function parseCustomerImportFile(rawText: string): CustomerDiscountItem[]
           continue;
         }
 
-        // 5 Columns: | No | Nama Customer | Tier | SW | DW |
+        // 5 Columns: | No | Nama Customer | Tier | SW | 275 / E Flute |
         if (cells.length >= 5) {
           const name = cells[1].replace(/\*\*/g, '').trim();
           if (!name) continue;
+          const swMarginPercent = parsePercentNumber(cells[3]);
+          const dwMarginPercent = cells[4].trim()
+            ? parsePercentNumber(cells[4])
+            : Number((swMarginPercent + 2).toFixed(2));
           results.push({
             id: `cust-imp-${Date.now()}-${i}`,
             name,
             tier: normalizeTier(cells[2]),
-            swMarginPercent: parsePercentNumber(cells[3]),
-            dwMarginPercent: parsePercentNumber(cells[4]),
+            swMarginPercent,
+            dwMarginPercent,
           });
           continue;
         }
 
-        // 4 Columns: | Nama Customer | Tier | SW | DW |
+        // 4 Columns: | Nama Customer | Tier | SW | 275 / E Flute |
         if (cells.length === 4) {
           const name = cells[0].replace(/\*\*/g, '').trim();
           if (!name) continue;
+          const swMarginPercent = parsePercentNumber(cells[2]);
+          const dwMarginPercent = cells[3].trim()
+            ? parsePercentNumber(cells[3])
+            : Number((swMarginPercent + 2).toFixed(2));
           results.push({
             id: `cust-imp-${Date.now()}-${i}`,
             name,
             tier: normalizeTier(cells[1]),
-            swMarginPercent: parsePercentNumber(cells[2]),
-            dwMarginPercent: parsePercentNumber(cells[3]),
+            swMarginPercent,
+            dwMarginPercent,
           });
           continue;
         }
 
-        // 3 Columns: | Nama Customer | SW | DW |
+        // 3 Columns: | Nama Customer | SW | 275 / E Flute |
         if (cells.length === 3) {
           const name = cells[0].replace(/\*\*/g, '').trim();
           if (!name) continue;
+          const swMarginPercent = parsePercentNumber(cells[1]);
+          const dwMarginPercent = cells[2].trim()
+            ? parsePercentNumber(cells[2])
+            : Number((swMarginPercent + 2).toFixed(2));
           results.push({
             id: `cust-imp-${Date.now()}-${i}`,
             name,
             tier: 'Tier 1',
-            swMarginPercent: parsePercentNumber(cells[1]),
-            dwMarginPercent: parsePercentNumber(cells[2]),
+            swMarginPercent,
+            dwMarginPercent,
           });
           continue;
         }
       }
     }
 
-    // 3. CSV / Semicolon Row (5 cols: No, Nama, Tier, SW, DW or 4 cols: Nama, Tier, SW, DW)
+    // 3. CSV / Semicolon Row (5 cols: No, Nama, Tier, SW, 275 / E Flute or 4 cols: Nama, Tier, SW, 275 / E Flute)
     const cleanedLine = line.replace(/^[-*•]\s*/, '').trim();
     if (cleanedLine.includes(',') || cleanedLine.includes(';')) {
       const delim = cleanedLine.includes(';') ? ';' : ',';
@@ -321,20 +349,28 @@ export function parseCustomerImportFile(rawText: string): CustomerDiscountItem[]
       }
 
       if (cols.length >= 5) {
+        const swMarginPercent = parsePercentNumber(cols[3]);
+        const dwMarginPercent = cols[4]
+          ? parsePercentNumber(cols[4])
+          : Number((swMarginPercent + 2).toFixed(2));
         results.push({
           id: `cust-imp-${Date.now()}-${i}`,
           name: cols[1],
           tier: normalizeTier(cols[2]),
-          swMarginPercent: parsePercentNumber(cols[3]),
-          dwMarginPercent: parsePercentNumber(cols[4]),
+          swMarginPercent,
+          dwMarginPercent,
         });
       } else if (cols.length === 4) {
+        const swMarginPercent = parsePercentNumber(cols[2]);
+        const dwMarginPercent = cols[3]
+          ? parsePercentNumber(cols[3])
+          : Number((swMarginPercent + 2).toFixed(2));
         results.push({
           id: `cust-imp-${Date.now()}-${i}`,
           name: cols[0],
           tier: normalizeTier(cols[1]),
-          swMarginPercent: parsePercentNumber(cols[2]),
-          dwMarginPercent: parsePercentNumber(cols[3]),
+          swMarginPercent,
+          dwMarginPercent,
         });
       }
     }

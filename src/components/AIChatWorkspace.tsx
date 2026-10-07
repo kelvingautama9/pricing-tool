@@ -220,7 +220,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
         (c, idx) =>
           `${idx + 1}.${c.name}[${c.tier}|SW:${
             c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`
-          }|DW:${
+          }|275/EF:${
             c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`
           }]`
       )
@@ -228,16 +228,18 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
 
     const masterTableRows = BASE_PRICE_TABLE.map(
       (r) =>
-        `${r.no}.${r.substance}(BF:${r['B/F']},CF:${r['C/F']},EF:${r['E/F']},CBF:${r['CB/F']})`
+        `${r.no}.${r.substance}(BF:${r['B/F']},CF:${r['C/F']},EF:${r['E/F']},CBF:${
+          r['CB/F'] ?? 'TIDAK_ADA'
+        })`
     ).join('; ');
 
     return `Total Customer: ${customers.length} (Tier 1:${tierCounts['Tier 1']}, Tier 2:${tierCounts['Tier 2']}, Tier 3:${tierCounts['Tier 3']}, Tier 4:${tierCounts['Tier 4']})
 Customer Aktif di Kalkulator: ${
       activeCust
-        ? `${activeCust.name} (${activeCust.tier}, SW:${activeCust.swMarginPercent}%, DW:${activeCust.dwMarginPercent}%)`
+        ? `${activeCust.name} (${activeCust.tier}, SW:${activeCust.swMarginPercent}%, 275/EF:${activeCust.dwMarginPercent}%)`
         : 'Manual'
     }
-DATABASE CUSTOMER (Format: No.Nama[Tier|SW:Margin|DW:Margin]):
+DATABASE CUSTOMER (Format: No.Nama[Tier|SW:Margin|275/EF:Margin]):
 ${customerRows}
 TABEL MASTER 15 ACUAN (Rp/M²):
 ${masterTableRows}`;
@@ -1434,12 +1436,14 @@ ${masterTableRows}`;
                                 onApplySpecToCalculator(
                                   {
                                     topLayer: specItem.topLayer,
+                                    flute1Layer: specItem.flute1Layer,
                                     midLayer: specItem.midLayer,
+                                    flute2Layer: specItem.flute2Layer,
                                     botLayer: specItem.botLayer,
                                     flute: specItem.flute,
                                   },
                                   undefined,
-                                  `AI · ${specItem.topLayer}/${specItem.midLayer}/${specItem.botLayer}`
+                                  `AI · ${specItem.label}`
                                 );
                               }}
                               title="Terapkan spesifikasi ini langsung ke Kalkulator Utama"

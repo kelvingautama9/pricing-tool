@@ -154,7 +154,8 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   const [custName, setCustName] = useState('');
   const [custTier, setCustTier] = useState<CustomerTier>('Tier 1');
   const [custSw, setCustSw] = useState('9');
-  const [custDw, setCustDw] = useState('13');
+  const [custDw, setCustDw] = useState('11');
+  const [isCustDwManuallyEdited, setIsCustDwManuallyEdited] = useState(false);
   const [custImportMsg, setCustImportMsg] = useState<string | null>(null);
   const [showSidebarGuide, setShowSidebarGuide] = useState(false);
 
@@ -256,7 +257,8 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
     setCustName('');
     setCustTier('Tier 1');
     setCustSw('0');
-    setCustDw('0');
+    setCustDw('2');
+    setIsCustDwManuallyEdited(false);
     setIsCustFormOpen(true);
   };
 
@@ -267,6 +269,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
     setCustTier(c.tier);
     setCustSw(String(c.swMarginPercent));
     setCustDw(String(c.dwMarginPercent));
+    setIsCustDwManuallyEdited(true);
     setIsCustFormOpen(true);
   };
 
@@ -972,7 +975,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                     </div>
                     <div>• Kol A: Nomor | Kol B: Nama Customer</div>
                     <div>• Kol C: Tier (Tier 1 / Tier 2 / Tier 3 / Tier 4)</div>
-                    <div>• Kol D: Diskon SW | Kol E: Diskon DW</div>
+                    <div>• Kol D: Diskon SW | Kol E: 275 / E Flute</div>
                   </div>
                 )}
 
@@ -1058,21 +1061,33 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           type="number"
                           step="0.1"
                           value={custSw}
-                          onChange={(e) => setCustSw(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustSw(val);
+                            if (!isCustDwManuallyEdited) {
+                              const parsed = parseFloat(val.replace(',', '.'));
+                              if (Number.isFinite(parsed)) {
+                                setCustDw(String(Number((parsed + 2).toFixed(2))));
+                              }
+                            }
+                          }}
                           placeholder="+9 / -5"
                           className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B]"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9.5px] text-neutral-400 mb-0.5">
-                          DW (%)
+                        <label className="block text-[9.5px] text-neutral-400 mb-0.5 truncate" title="Diskon khusus saat memakai bahan 275 atau E-Flute">
+                          275 / E Flute (%)
                         </label>
                         <input
                           type="number"
                           step="0.1"
                           value={custDw}
-                          onChange={(e) => setCustDw(e.target.value)}
-                          placeholder="+13"
+                          onChange={(e) => {
+                            setIsCustDwManuallyEdited(true);
+                            setCustDw(e.target.value);
+                          }}
+                          placeholder="+11"
                           className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B]"
                         />
                       </div>
@@ -1140,7 +1155,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                               |
                             </span>
                             <span className="text-neutral-400">
-                              DW: {dwSign}
+                              275/EF: {dwSign}
                               {cust.dwMarginPercent}%
                             </span>
                           </div>
@@ -1393,7 +1408,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
             <div className="flex items-center justify-between text-[10.5px]">
               <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 font-medium">
                 <Layers className="w-3 h-3 text-[#C65D3B]" />
-                <span>Engine Single Wall</span>
+                <span>Additive Engine (SW & DW)</span>
               </div>
               <span className="w-1.5 h-1.5 rounded-xs bg-emerald-600" />
             </div>

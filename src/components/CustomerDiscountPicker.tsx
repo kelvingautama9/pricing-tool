@@ -53,7 +53,8 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
   const [formName, setFormName] = useState('');
   const [formTier, setFormTier] = useState<CustomerTier>('Tier 1');
   const [formSw, setFormSw] = useState('9');
-  const [formDw, setFormDw] = useState('13');
+  const [formDw, setFormDw] = useState('11');
+  const [isDwManuallyEdited, setIsDwManuallyEdited] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const fileImportRef = useRef<HTMLInputElement>(null);
@@ -108,7 +109,8 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
     setFormName('');
     setFormTier('Tier 1');
     setFormSw('0');
-    setFormDw('0');
+    setFormDw('2');
+    setIsDwManuallyEdited(false);
     setIsFormOpen(true);
     setShowFormatGuide(false);
   };
@@ -121,6 +123,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
     setFormTier(cust.tier);
     setFormSw(String(cust.swMarginPercent));
     setFormDw(String(cust.dwMarginPercent));
+    setIsDwManuallyEdited(true);
     setIsFormOpen(true);
     setShowFormatGuide(false);
   };
@@ -343,22 +346,34 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                     type="number"
                     step="0.1"
                     value={formSw}
-                    onChange={(e) => setFormSw(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormSw(val);
+                      if (!isDwManuallyEdited) {
+                        const parsed = parseFloat(val.replace(',', '.'));
+                        if (Number.isFinite(parsed)) {
+                          setFormDw(String(Number((parsed + 2).toFixed(2))));
+                        }
+                      }
+                    }}
                     placeholder="+9 / -5"
                     className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] text-neutral-500 mb-0.5">
-                    DW (%)
+                  <label className="block text-[10px] text-neutral-500 mb-0.5 truncate" title="Diskon khusus saat memakai bahan 275 atau E-Flute">
+                    275 / E Flute (%)
                   </label>
                   <input
                     type="number"
                     step="0.1"
                     value={formDw}
-                    onChange={(e) => setFormDw(e.target.value)}
-                    placeholder="+13"
+                    onChange={(e) => {
+                      setIsDwManuallyEdited(true);
+                      setFormDw(e.target.value);
+                    }}
+                    placeholder="+11"
                     className="w-full px-2 py-1 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
                   />
                 </div>
@@ -426,7 +441,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                         </span>
                         <span className="text-neutral-300 dark:text-neutral-600">|</span>
                         <span className="text-neutral-400 dark:text-neutral-500">
-                          DW: {formatSignedPercent(cust.dwMarginPercent)}
+                          275/EF: {formatSignedPercent(cust.dwMarginPercent)}
                         </span>
                       </div>
                     </div>
@@ -488,11 +503,11 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                   • Kolom B: Nama Customer (PT Vinns Carton)<br />
                   • Kolom C: Tier (Tier 1 / Tier 2 / Tier 3 / Tier 4)<br />
                   • Kolom D: Diskon SW (+9% atau -3.5%)<br />
-                  • Kolom E: Diskon DW (+13%)
+                  • Kolom E: 275 / E Flute (+11% — sudah termasuk +2%)
                 </div>
                 <pre className="p-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/6 dark:border-white/8 font-mono text-[9px] text-neutral-600 dark:text-neutral-300 overflow-x-auto">
-{`| No | Nama Customer   | Tier   | SW  | DW   |
-| 1  | PT Vinns Carton | Tier 1 | +9% | +13% |`}
+{`| No | Nama Customer   | Tier   | Diskon SW | 275 / E Flute |
+| 1  | PT Vinns Carton | Tier 1 | +9%       | +11%          |`}
                 </pre>
               </div>
             )}

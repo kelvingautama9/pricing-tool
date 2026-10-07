@@ -8,7 +8,7 @@ import {
   OuterLayerMaterial,
   MidLayerMaterial,
 } from '../utils/pricingEngine';
-import { CheckCircle2, Play, Table2, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Play, ShieldCheck } from 'lucide-react';
 
 interface MasterTableAndTestsProps {
   activeTab: 'calculator' | 'master' | 'tests';
@@ -30,7 +30,7 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
               01. Master Tabel Referensi Harga Dasar (M²)
             </h2>
             <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-              MYPAK Sheet Pricing Calculator · Harga belum termasuk PPN
+              MYPAK Sheet Pricing Calculator · Single Wall & Double Wall (CB/F) · Harga belum termasuk PPN
             </p>
           </div>
           <div className="text-xs font-mono text-neutral-500 dark:text-neutral-400 tabular-nums">
@@ -47,9 +47,7 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
                   <th className="py-3 px-4">Substance (Top/Mid/Bot)</th>
                   <th className="py-3 px-4 text-right">B/F (Single Wall)</th>
                   <th className="py-3 px-4 text-right">C/F (Single Wall)</th>
-                  <th className="py-3 px-4 text-right text-neutral-400 dark:text-neutral-500">
-                    CB/F (Double Wall · Nonaktif)
-                  </th>
+                  <th className="py-3 px-4 text-right">CB/F (Double Wall)</th>
                   <th className="py-3 px-4 text-right">E/F (Single Wall)</th>
                   <th className="py-3 px-4 text-right">Aksi Cepat</th>
                 </tr>
@@ -87,31 +85,65 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
                       <td className="py-2.5 px-4 text-right">
                         {formatRupiah(row['C/F'])}
                       </td>
-                      <td className="py-2.5 px-4 text-right text-neutral-400 dark:text-neutral-500 line-through decoration-neutral-400/50">
-                        {formatRupiah(row['CB/F'])}
+                      <td className="py-2.5 px-4 text-right">
+                        {row['CB/F'] !== null ? (
+                          formatRupiah(row['CB/F'])
+                        ) : (
+                          <span className="text-neutral-400 dark:text-neutral-500 text-[10.5px]">
+                            (TIDAK ADA)
+                          </span>
+                        )}
                       </td>
                       <td className="py-2.5 px-4 text-right">
                         {formatRupiah(row['E/F'])}
                       </td>
                       <td className="py-2.5 px-4 text-right font-sans">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onLoadPresetInput(
-                              {
-                                topLayer: top,
-                                midLayer: mid,
-                                botLayer: bot,
-                                flute: 'B/F',
-                                marginPercent: 0,
-                              },
-                              `Master #${row.no} (${row.substance})`
-                            )
-                          }
-                          className="px-2.5 py-1 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-[#C65D3B] hover:text-white text-[11px] font-medium transition-colors duration-150 cursor-pointer"
-                        >
-                          Gunakan Acuan
-                        </button>
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onLoadPresetInput(
+                                {
+                                  topLayer: top,
+                                  midLayer: mid,
+                                  botLayer: bot,
+                                  flute: 'B/F',
+                                  marginPercent: 0,
+                                  sheetLengthMm: 1000,
+                                  sheetWidthMm: 1000,
+                                },
+                                `Master #${row.no} SW (${row.substance})`
+                              )
+                            }
+                            className="px-2 py-1 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-[#C65D3B] hover:text-white text-[10.5px] font-medium transition-colors duration-150 cursor-pointer"
+                          >
+                            SW
+                          </button>
+                          {row['CB/F'] !== null && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onLoadPresetInput(
+                                  {
+                                    topLayer: top,
+                                    flute1Layer: 'M125',
+                                    midLayer: mid,
+                                    flute2Layer: 'M125',
+                                    botLayer: bot,
+                                    flute: 'CB/F',
+                                    marginPercent: 0,
+                                    sheetLengthMm: 1000,
+                                    sheetWidthMm: 1000,
+                                  },
+                                  `Master #${row.no} DW (${top}/M125/${mid}/M125/${bot})`
+                                )
+                              }
+                              className="px-2 py-1 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-[#C65D3B] hover:text-white text-[10.5px] font-medium transition-colors duration-150 cursor-pointer"
+                            >
+                              CB/F
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -121,39 +153,39 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
           </div>
         </div>
 
-        {/* Ringkasan Aturan Penyesuaian sesuai Gambar ke-4 */}
+        {/* Ringkasan Aturan Penyesuaian sesuai System Blueprint (Additive Architecture) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
           <div className="p-4 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 space-y-2">
             <h3 className="text-xs font-display font-bold uppercase tracking-wider text-[#C65D3B]">
-              Aturan Penambahan (Virtual Base)
+              Tahap 2: Virtual Base (Nominal Rp)
             </h3>
             <ul className="text-xs space-y-1.5 text-neutral-600 dark:text-neutral-300 font-mono tabular-nums">
-              <li>• M125 → M150 atau M135: +Rp 300 / layer</li>
-              <li>• K150 atau K200 di tengah: +Rp 2.000</li>
-              <li>• K275 di tengah: +Rp 3.700</li>
+              <li>• Layer M150 atau M135: +Rp 300 / layer</li>
+              <li>• Inner Layer K150 / K200: +Rp 2.000 / layer</li>
+              <li>• Inner Layer K275: +Rp 3.700 / layer</li>
             </ul>
           </div>
 
           <div className="p-4 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 space-y-2">
             <h3 className="text-xs font-display font-bold uppercase tracking-wider text-[#C65D3B]">
-              Aturan Penurunan (Single Wall)
+              Tahap 3: Diskon Downgrade (SW vs DW)
             </h3>
             <ul className="text-xs space-y-1.5 text-neutral-600 dark:text-neutral-300 font-mono tabular-nums">
-              <li>• Ketebalan 125 → 110: -2,5% / Layer</li>
-              <li>• Ketebalan 125 → 100: -4,0% / Layer</li>
-              <li>• Ketebalan 150 → 135: -2,0% / Layer</li>
+              <li>• 125 → 110: SW -2,5% | DW -1,5% / layer</li>
+              <li>• 125 → 100: SW -4,0% | DW -2,5% / layer</li>
+              <li>• 150 → 135: SW -2,0% | DW -1,0% / layer</li>
             </ul>
           </div>
 
           <div className="p-4 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 space-y-2">
             <h3 className="text-xs font-display font-bold uppercase tracking-wider text-[#C65D3B]">
-              Multiplier Khusus & Pembulatan
+              Additive Modifier & Finalisasi
             </h3>
             <ul className="text-xs space-y-1.5 text-neutral-600 dark:text-neutral-300 font-mono tabular-nums">
-              <li>• Mengandung bahan 275: +2% dari Reg</li>
-              <li>• Jenis Flute E/F: +2% dari Reg</li>
-              <li>• Bertumpuk (275 + E/F): Akumulasi +4%</li>
-              <li>• Desimal ,5 dibulatkan ke atas</li>
+              <li>• Bahan 275: +2% | Flute E/F: +2%</li>
+              <li>• Total Modifier = Margin + Multiplier - Diskon</li>
+              <li>• Harga/M² = ROUND(VirtualBase × (1 + Mod), 0)</li>
+              <li>• Harga/Pcs = ROUND(Harga/M² × Luas, 2)</li>
             </ul>
           </div>
         </div>
@@ -162,20 +194,31 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
   }
 
   if (activeTab === 'tests') {
+    const passedCount = VALIDATED_TEST_CASES.filter((tc) => {
+      const liveCalc = calculateCartonPricing(tc.input);
+      const m2Match = liveCalc.success && liveCalc.hargaBersihPerM2 === tc.expectedResultRp;
+      const pcsMatch =
+        liveCalc.hargaPerSheetRp !== undefined &&
+        Math.abs(liveCalc.hargaPerSheetRp - tc.expectedSheetRp) < 0.005;
+      return m2Match && pcsMatch;
+    }).length;
+
     return (
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-black/8 dark:border-white/10">
           <div>
             <h2 className="text-sm sm:text-base font-display font-bold tracking-tight text-[#1C1B1A] dark:text-[#F2EFE9]">
-              02. Validated Test Cases (Unit Testing SOP)
+              02. Validated Unit Tests (The Additive Architecture SSOT)
             </h2>
             <p className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
-              Verifikasi langsung 5 skenario uji resmi dari blueprint untuk memastikan tidak ada Double Penalty pada margin.
+              Verifikasi langsung 3 skenario ekstrem dari System Blueprint (Double Wall 5-Layer CB/F, Multiplier Bertumpuk E/F + 275, dan Virtual Base M135).
             </p>
           </div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xs bg-emerald-600/10 border border-emerald-600/25 text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400 self-start sm:self-auto shrink-0">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>5 / 5 Test Case Lulus Presisi 100%</span>
+            <span>
+              {passedCount} / {VALIDATED_TEST_CASES.length} Test Case Lulus Presisi 100%
+            </span>
           </div>
         </div>
 
@@ -183,7 +226,12 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
           {VALIDATED_TEST_CASES.map((tc) => {
             const liveCalc = calculateCartonPricing(tc.input);
             const isPass =
-              liveCalc.success && liveCalc.hargaBersihPerM2 === tc.expectedResultRp;
+              liveCalc.success &&
+              liveCalc.hargaBersihPerM2 === tc.expectedResultRp &&
+              liveCalc.hargaPerSheetRp !== undefined &&
+              Math.abs(liveCalc.hargaPerSheetRp - tc.expectedSheetRp) < 0.005;
+
+            const modSign = liveCalc.totalAdditiveModifierPercent > 0 ? '+' : '';
 
             return (
               <div
@@ -212,7 +260,7 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
                   </p>
 
                   {/* Structured Micro-Metric Strip */}
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-0.5 font-mono text-[10px] tabular-nums">
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 pt-0.5 font-mono text-[10px] tabular-nums">
                     <div className="px-2 py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
                       <span className="block text-[9px] text-neutral-400">Acuan Tabel</span>
                       <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
@@ -226,21 +274,28 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
                       </span>
                     </div>
                     <div className="px-2 py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[9px] text-neutral-400">Margin</span>
+                      <span className="font-semibold text-[#C65D3B]">
+                        +{tc.input.marginPercent}%
+                      </span>
+                    </div>
+                    <div className="px-2 py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[9px] text-neutral-400">Multiplier</span>
+                      <span className="font-semibold text-neutral-600 dark:text-neutral-300">
+                        +{liveCalc.totalMultiplierPercent}%
+                      </span>
+                    </div>
+                    <div className="px-2 py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
                       <span className="block text-[9px] text-neutral-400">Downgrade</span>
                       <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                         -{liveCalc.totalDowngradePercent}%
                       </span>
                     </div>
                     <div className="px-2 py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
-                      <span className="block text-[9px] text-neutral-400">Margin</span>
+                      <span className="block text-[9px] text-neutral-400">Total Modifier</span>
                       <span className="font-semibold text-[#C65D3B]">
-                        +{tc.input.marginPercent}%
-                      </span>
-                    </div>
-                    <div className="px-2 py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5 col-span-2 sm:col-span-1">
-                      <span className="block text-[9px] text-neutral-400">Multiplier</span>
-                      <span className="font-semibold text-neutral-600 dark:text-neutral-300">
-                        +{liveCalc.totalMultiplierPercent}%
+                        {modSign}
+                        {liveCalc.totalAdditiveModifierPercent}%
                       </span>
                     </div>
                   </div>
@@ -249,10 +304,10 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
                 <div className="flex items-center justify-between lg:justify-end gap-3 pt-2.5 lg:pt-0 border-t lg:border-t-0 border-black/6 dark:border-white/8 shrink-0">
                   <div className="text-left lg:text-right font-mono tabular-nums">
                     <div className="text-[9.5px] text-neutral-400 dark:text-neutral-500">
-                      Target: {formatRupiah(tc.expectedResultRp)} · Dec: {liveCalc.hargaFinalMentah.toFixed(2)}
+                      M²: {formatRupiah(liveCalc.hargaBersihPerM2)} (Mentah: {liveCalc.hargaFinalMentah.toFixed(2)})
                     </div>
                     <div className="text-sm font-bold text-[#C65D3B] mt-0.5">
-                      {formatRupiah(liveCalc.hargaBersihPerM2)}
+                      Pcs: {formatRupiah(liveCalc.hargaPerSheetRp ?? liveCalc.hargaBersihPerM2)}
                     </div>
                   </div>
 

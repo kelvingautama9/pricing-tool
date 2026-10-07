@@ -9,6 +9,7 @@ import {
   PricingInput,
   calculateCartonPricing,
   formatRupiah,
+  resolveCustomerEffectiveMargin,
 } from './pricingEngine';
 
 // Dynamic Context Sniffer & Anti-Hallucination Engine
@@ -70,7 +71,9 @@ export function detectCurrentWebContext(): WebAppContext {
  */
 export interface DetectedSpecAction {
   topLayer: OuterLayerMaterial;
+  flute1Layer?: MidLayerMaterial;
   midLayer: MidLayerMaterial;
+  flute2Layer?: MidLayerMaterial;
   botLayer: OuterLayerMaterial;
   flute: FluteType;
   marginPercent?: number;
@@ -89,27 +92,87 @@ export function extractSpecsFromText(
   defaultMargin = 0
 ): DetectedSpecAction[] {
   if (!text) return [];
-  const regex = /\b([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\b/g;
   const results: DetectedSpecAction[] = [];
   const seen = new Set<string>();
 
   // Detect if text mentions a specific flute near the spec or globally
-  let detectedFlute: FluteType = defaultFlute === 'CB/F' ? 'B/F' : defaultFlute;
-  if (/\bE\s*\/?\s*F(?:lute)?\b/i.test(text)) detectedFlute = 'E/F';
-  else if (/\bC\s*\/?\s*F(?:lute)?\b/i.test(text)) detectedFlute = 'C/F';
-  else if (/\bB\s*\/?\s*F(?:lute)?\b/i.test(text)) detectedFlute = 'B/F';
+  let detectedFlute: FluteType = defaultFlute;
+  if (/\bCB\s*\/?\s*F(?:lute)?\b/i.test(text) || /\bdouble\s*wall\b/i.test(text)) {
+    detectedFlute = 'CB/F';
+  } else if (/\bE\s*\/?\s*F(?:lute)?\b/i.test(text)) {
+    detectedFlute = 'E/F';
+  } else if (/\bC\s*\/?\s*F(?:lute)?\b/i.test(text)) {
+    detectedFlute = 'C/F';
+  } else if (/\bB\s*\/?\s*F(?:lute)?\b/i.test(text)) {
+    detectedFlute = 'B/F';
+  }
 
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
-    const top = match[1].toUpperCase() as OuterLayerMaterial;
-    const mid = match[2].toUpperCase() as MidLayerMaterial;
-    const bot = match[3].toUpperCase() as OuterLayerMaterial;
+  // 1. Check 5-Layer Double Wall specs first: Top/Flute1/Mid/Flute2/Bot
+  const regex5 =
+    /\b([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\b/g;
+  let m5: RegExpExecArray | null;
+  while ((m5 = regex5.exec(text)) !== null) {
+    const top = m5[1].toUpperCase() as OuterLayerMaterial;
+    const f1 = m5[2].toUpperCase() as MidLayerMaterial;
+    const mid = m5[3].toUpperCase() as MidLayerMaterial;
+    const f2 = m5[4].toUpperCase() as MidLayerMaterial;
+    const bot = m5[5].toUpperCase() as OuterLayerMaterial;
+
+    if (
+      !VALID_OUTER_SET.has(top) ||
+      !VALID_MID_SET.has(f1) ||
+      !VALID_MID_SET.has(mid) ||
+      !VALID_MID_SET.has(f2) ||
+      !VALID_OUTER_SET.has(bot)
+    ) {
+      continue;
+    }
+
+    const key = `${top}/${f1}/${mid}/${f2}/${bot}-CB/F-${defaultMargin}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const calc = calculateCartonPricing({
+      topLayer: top,
+      flute1Layer: f1,
+      midLayer: mid,
+      flute2Layer: f2,
+      botLayer: bot,
+      flute: 'CB/F',
+      marginPercent: defaultMargin,
+    });
+
+    if (calc.success) {
+      results.push({
+        topLayer: top,
+        flute1Layer: f1,
+        midLayer: mid,
+        flute2Layer: f2,
+        botLayer: bot,
+        flute: 'CB/F',
+        marginPercent: defaultMargin,
+        label: `${top}/${f1}/${mid}/${f2}/${bot} (CB/F)`,
+        pricePerM2: calc.hargaBersihPerM2,
+      });
+    }
+  }
+
+  // 2. Check 3-Layer Single Wall specs: Top/Mid/Bot (skip substrings of 5-layer matches)
+  const stripped5 = text.replace(regex5, ' ');
+  const regex3 = /\b([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\b/g;
+  const swFlute: FluteType = detectedFlute === 'CB/F' ? 'B/F' : detectedFlute;
+
+  let m3: RegExpExecArray | null;
+  while ((m3 = regex3.exec(stripped5)) !== null) {
+    const top = m3[1].toUpperCase() as OuterLayerMaterial;
+    const mid = m3[2].toUpperCase() as MidLayerMaterial;
+    const bot = m3[3].toUpperCase() as OuterLayerMaterial;
 
     if (!VALID_OUTER_SET.has(top) || !VALID_MID_SET.has(mid) || !VALID_OUTER_SET.has(bot)) {
       continue;
     }
 
-    const key = `${top}/${mid}/${bot}-${detectedFlute}-${defaultMargin}`;
+    const key = `${top}/${mid}/${bot}-${swFlute}-${defaultMargin}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -117,7 +180,7 @@ export function extractSpecsFromText(
       topLayer: top,
       midLayer: mid,
       botLayer: bot,
-      flute: detectedFlute,
+      flute: swFlute,
       marginPercent: defaultMargin,
     });
 
@@ -126,9 +189,9 @@ export function extractSpecsFromText(
         topLayer: top,
         midLayer: mid,
         botLayer: bot,
-        flute: detectedFlute,
+        flute: swFlute,
         marginPercent: defaultMargin,
-        label: `${top}/${mid}/${bot} (${detectedFlute})`,
+        label: `${top}/${mid}/${bot} (${swFlute})`,
         pricePerM2: calc.hargaBersihPerM2,
       });
     }
@@ -167,7 +230,30 @@ export function buildSmartRagAndPreCalcContext(
   const queryTokens = qLower
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w.length >= 3 && !['yang', 'untuk', ' berapa', 'harga', 'spek', 'karton', 'sheet', 'dan', 'atau', 'dengan', 'dari', 'pada', 'pt', 'cv', 'tier', 'diskon', 'margin'].includes(w));
+    .filter(
+      (w) =>
+        w.length >= 3 &&
+        ![
+          'yang',
+          'untuk',
+          'berapa',
+          'harga',
+          'spek',
+          'karton',
+          'sheet',
+          'dan',
+          'atau',
+          'dengan',
+          'dari',
+          'pada',
+          'pt',
+          'cv',
+          'tier',
+          'diskon',
+          'margin',
+          'flute',
+        ].includes(w)
+    );
 
   const matchedCustomers = customers.filter((c) => {
     const cLower = c.name.toLowerCase();
@@ -182,59 +268,94 @@ export function buildSmartRagAndPreCalcContext(
     ? customers.filter((c) => c.tier === requestedTier)
     : [];
 
-  // 3. Deterministic Pre-Calculation Engine:
-  // Extract any substance specs in user query (or use active calculator spec) and compute 100% exact prices across B/F, C/F, E/F!
-  const rawSpecRegex = /\b([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\b/g;
-  const mentionedSpecs: Array<{ top: OuterLayerMaterial; mid: MidLayerMaterial; bot: OuterLayerMaterial }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = rawSpecRegex.exec(q)) !== null) {
-    const top = m[1].toUpperCase() as OuterLayerMaterial;
-    const mid = m[2].toUpperCase() as MidLayerMaterial;
-    const bot = m[3].toUpperCase() as OuterLayerMaterial;
-    if (VALID_OUTER_SET.has(top) && VALID_MID_SET.has(mid) && VALID_OUTER_SET.has(bot)) {
-      mentionedSpecs.push({ top, mid, bot });
+  // 3. Deterministic Pre-Calculation Engine (Supports both 3-Layer SW and 5-Layer DW CB/F)
+  type PreCalcSpecItem = {
+    isDW: boolean;
+    top: OuterLayerMaterial;
+    f1?: MidLayerMaterial;
+    mid: MidLayerMaterial;
+    f2?: MidLayerMaterial;
+    bot: OuterLayerMaterial;
+  };
+  const mentionedSpecs: PreCalcSpecItem[] = [];
+
+  const regex5 =
+    /\b([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\b/g;
+  let m5: RegExpExecArray | null;
+  while ((m5 = regex5.exec(q)) !== null) {
+    const top = m5[1].toUpperCase() as OuterLayerMaterial;
+    const f1 = m5[2].toUpperCase() as MidLayerMaterial;
+    const mid = m5[3].toUpperCase() as MidLayerMaterial;
+    const f2 = m5[4].toUpperCase() as MidLayerMaterial;
+    const bot = m5[5].toUpperCase() as OuterLayerMaterial;
+    if (
+      VALID_OUTER_SET.has(top) &&
+      VALID_MID_SET.has(f1) &&
+      VALID_MID_SET.has(mid) &&
+      VALID_MID_SET.has(f2) &&
+      VALID_OUTER_SET.has(bot)
+    ) {
+      mentionedSpecs.push({ isDW: true, top, f1, mid, f2, bot });
     }
   }
 
-  // Always include the currently active calculator spec so any question about "spek aktif" or "alternatif downgrade" has exact pre-calculated numbers
-  const specsToPreCalc =
+  const strippedQ = q.replace(regex5, ' ');
+  const regex3 = /\b([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\s*\/\s*([MKmk]\d{3})\b/g;
+  let m3: RegExpExecArray | null;
+  while ((m3 = regex3.exec(strippedQ)) !== null) {
+    const top = m3[1].toUpperCase() as OuterLayerMaterial;
+    const mid = m3[2].toUpperCase() as MidLayerMaterial;
+    const bot = m3[3].toUpperCase() as OuterLayerMaterial;
+    if (VALID_OUTER_SET.has(top) && VALID_MID_SET.has(mid) && VALID_OUTER_SET.has(bot)) {
+      mentionedSpecs.push({ isDW: false, top, mid, bot });
+    }
+  }
+
+  // Detect dimensions in query like "1860 x 1161" or use active calculator dimensions
+  const dimMatch = q.match(/\b(\d{3,4})\s*[x×*]\s*(\d{3,4})\b/i);
+  const queryLengthMm = dimMatch ? Number(dimMatch[1]) : activeCalculationInput.sheetLengthMm;
+  const queryWidthMm = dimMatch ? Number(dimMatch[2]) : activeCalculationInput.sheetWidthMm;
+
+  const specsToPreCalc: PreCalcSpecItem[] =
     mentionedSpecs.length > 0
       ? mentionedSpecs.slice(0, 4)
       : [
           {
+            isDW: activeCalculationInput.flute === 'CB/F',
             top: activeCalculationInput.topLayer,
+            f1: activeCalculationInput.flute1Layer || 'M125',
             mid: activeCalculationInput.midLayer,
+            f2: activeCalculationInput.flute2Layer || 'M125',
             bot: activeCalculationInput.botLayer,
           },
         ];
 
-  // Determine which margins to pre-calculate:
-  // - 0% (Nett)
-  // - Active calculator margin
-  // - Any matched customer's SW margin (up to 4 matched customers)
-  const marginsToCalc: Array<{ label: string; margin: number }> = [
+  const marginsToCalc: Array<{
+    label: string;
+    margin: number;
+    customerRef?: CustomerDiscountItem;
+  }> = [
     {
       label: `Kalkulator Aktif (${activeCalculationInput.marginPercent}%)`,
       margin: activeCalculationInput.marginPercent,
+      customerRef: activeCust || undefined,
     },
   ];
   if (activeCalculationInput.marginPercent !== 0) {
     marginsToCalc.push({ label: 'Nett 0%', margin: 0 });
   }
   matchedCustomers.slice(0, 4).forEach((mc) => {
-    if (!marginsToCalc.some((x) => x.margin === mc.swMarginPercent && x.label.includes(mc.name))) {
-      marginsToCalc.push({
-        label: `${mc.name} (${mc.tier}, SW ${mc.swMarginPercent > 0 ? `+${mc.swMarginPercent}%` : `${mc.swMarginPercent}%`})`,
-        margin: mc.swMarginPercent,
-      });
-    }
+    marginsToCalc.push({
+      label: `${mc.name} (${mc.tier}, SW:${mc.swMarginPercent}%, 275/EF:${mc.dwMarginPercent}%)`,
+      margin: mc.swMarginPercent,
+      customerRef: mc,
+    });
   });
 
-  // Also detect explicit percentage in query like "margin 5%" or "diskon -4%"
   const pctMatch = q.match(/([+-]?\d+(?:[.,]\d+)?)\s*%/);
   if (pctMatch) {
     const parsedPct = parseFloat(pctMatch[1].replace(',', '.'));
-    if (Number.isFinite(parsedPct) && !marginsToCalc.some((x) => x.margin === parsedPct)) {
+    if (Number.isFinite(parsedPct) && !marginsToCalc.some((x) => x.margin === parsedPct && !x.customerRef)) {
       marginsToCalc.push({ label: `Input Query (${parsedPct}%)`, margin: parsedPct });
     }
   }
@@ -242,63 +363,90 @@ export function buildSmartRagAndPreCalcContext(
   const deterministicPreCalcLines: string[] = [];
   for (const sp of specsToPreCalc) {
     for (const mg of marginsToCalc) {
-      const bf = calculateCartonPricing({
-        topLayer: sp.top,
-        midLayer: sp.mid,
-        botLayer: sp.bot,
-        flute: 'B/F',
-        marginPercent: mg.margin,
-      });
-      const cf = calculateCartonPricing({
-        topLayer: sp.top,
-        midLayer: sp.mid,
-        botLayer: sp.bot,
-        flute: 'C/F',
-        marginPercent: mg.margin,
-      });
-      const ef = calculateCartonPricing({
-        topLayer: sp.top,
-        midLayer: sp.mid,
-        botLayer: sp.bot,
-        flute: 'E/F',
-        marginPercent: mg.margin,
-      });
+      if (sp.isDW) {
+        const resolved = mg.customerRef
+          ? resolveCustomerEffectiveMargin(mg.customerRef, {
+              topLayer: sp.top,
+              flute1Layer: sp.f1,
+              midLayer: sp.mid,
+              flute2Layer: sp.f2,
+              botLayer: sp.bot,
+              flute: 'CB/F',
+            })
+          : {
+              effectiveMarginPercent: mg.margin,
+              customerSpecial275EfOverrideActive: false,
+            };
 
-      if (bf.success && cf.success && ef.success) {
-        deterministicPreCalcLines.push(
-          `• Spek ${sp.top}/${sp.mid}/${sp.bot} [${mg.label}] -> Acuan: #${bf.baseRowNo} ${bf.mappedReferenceSubstance}${bf.autoSwapped ? ' (Auto-Swap)' : ''} | Upgrade Nominal: +Rp ${bf.totalNominalUpgrade} | Downgrade: -${bf.totalDowngradePercent}% | Multiplier 275: +${bf.multiplierDetails.some((d) => d.code === '275_MATERIAL') ? 2 : 0}% => HASIL EKSAK: B/F = ${formatRupiah(bf.hargaBersihPerM2)}/M² (mentah ${bf.hargaFinalMentah.toFixed(2)}), C/F = ${formatRupiah(cf.hargaBersihPerM2)}/M² (mentah ${cf.hargaFinalMentah.toFixed(2)}), E/F (+2% flute) = ${formatRupiah(ef.hargaBersihPerM2)}/M² (mentah ${ef.hargaFinalMentah.toFixed(2)})`
-        );
+        const cbf = calculateCartonPricing({
+          topLayer: sp.top,
+          flute1Layer: sp.f1,
+          midLayer: sp.mid,
+          flute2Layer: sp.f2,
+          botLayer: sp.bot,
+          flute: 'CB/F',
+          marginPercent: resolved.effectiveMarginPercent,
+          customerSpecial275EfOverrideActive: resolved.customerSpecial275EfOverrideActive,
+          sheetLengthMm: queryLengthMm,
+          sheetWidthMm: queryWidthMm,
+        });
+
+        if (cbf.success) {
+          const pcsText =
+            cbf.hargaPerSheetRp !== undefined
+              ? ` | Luas ${queryLengthMm}x${queryWidthMm}mm (${cbf.areaPerSheetM2?.toFixed(5)} M²) => Harga/Pcs = ${formatRupiah(cbf.hargaPerSheetRp)}`
+              : '';
+          deterministicPreCalcLines.push(
+            `• Double Wall 5-Layer ${cbf.inputSubstanceString} [${mg.label}] -> Acuan: #${cbf.baseRowNo} ${cbf.mappedReferenceSubstance} (${formatRupiah(cbf.basePrice)}) | Virtual Base: ${formatRupiah(cbf.virtualBase)} (+Rp ${cbf.totalNominalUpgrade}) | Additive Modifier: ${cbf.totalAdditiveModifierPercent > 0 ? '+' : ''}${cbf.totalAdditiveModifierPercent}% (Margin ${cbf.marginPercent}% + Mult ${cbf.totalMultiplierPercent}% - Diskon DW ${cbf.totalDowngradePercent}%) => HASIL EKSAK CB/F = ${formatRupiah(cbf.hargaBersihPerM2)}/M² (mentah ${cbf.hargaFinalMentah.toFixed(2)})${pcsText}`
+          );
+        }
+      } else {
+        const calcForFlute = (fluteType: 'B/F' | 'C/F' | 'E/F') => {
+          const resolved = mg.customerRef
+            ? resolveCustomerEffectiveMargin(mg.customerRef, {
+                topLayer: sp.top,
+                midLayer: sp.mid,
+                botLayer: sp.bot,
+                flute: fluteType,
+              })
+            : {
+                effectiveMarginPercent: mg.margin,
+                customerSpecial275EfOverrideActive: false,
+              };
+          return calculateCartonPricing({
+            topLayer: sp.top,
+            midLayer: sp.mid,
+            botLayer: sp.bot,
+            flute: fluteType,
+            marginPercent: resolved.effectiveMarginPercent,
+            customerSpecial275EfOverrideActive: resolved.customerSpecial275EfOverrideActive,
+            sheetLengthMm: queryLengthMm,
+            sheetWidthMm: queryWidthMm,
+          });
+        };
+
+        const bf = calcForFlute('B/F');
+        const cf = calcForFlute('C/F');
+        const ef = calcForFlute('E/F');
+
+        if (bf.success && cf.success && ef.success) {
+          const pcsText =
+            bf.hargaPerSheetRp !== undefined
+              ? ` | Harga/Pcs (${queryLengthMm}x${queryWidthMm}mm): B/F=${formatRupiah(bf.hargaPerSheetRp)}, C/F=${formatRupiah(cf.hargaPerSheetRp!)}, E/F=${formatRupiah(ef.hargaPerSheetRp!)}`
+              : '';
+          deterministicPreCalcLines.push(
+            `• Single Wall 3-Layer ${sp.top}/${sp.mid}/${sp.bot} [${mg.label}] -> Acuan: #${bf.baseRowNo} ${bf.mappedReferenceSubstance}${bf.autoSwapped ? ' (Auto-Swap)' : ''} | Virtual Base B/F: ${formatRupiah(bf.virtualBase)} (+Rp ${bf.totalNominalUpgrade}) | Downgrade SW: -${bf.totalDowngradePercent}% | Total Additive Mod B/F: ${bf.totalAdditiveModifierPercent > 0 ? '+' : ''}${bf.totalAdditiveModifierPercent}% => HASIL EKSAK: B/F = ${formatRupiah(bf.hargaBersihPerM2)}/M² (mentah ${bf.hargaFinalMentah.toFixed(2)}), C/F = ${formatRupiah(cf.hargaBersihPerM2)}/M², E/F = ${formatRupiah(ef.hargaBersihPerM2)}/M² (Mod E/F: ${ef.totalAdditiveModifierPercent > 0 ? '+' : ''}${ef.totalAdditiveModifierPercent}%)${pcsText}`
+          );
+        }
       }
     }
   }
 
-  // Also pre-calculate 2 smart downgrade alternatives for the active spec so recommendations are 100% exact!
-  const downgradeCandidates: Array<{ top: OuterLayerMaterial; mid: MidLayerMaterial; bot: OuterLayerMaterial }> = [
-    { top: 'K110', mid: 'M110', bot: 'K110' },
-    { top: 'K110', mid: 'M100', bot: 'K110' },
-    { top: 'K125', mid: 'M110', bot: 'K125' },
-    { top: 'K135', mid: 'M125', bot: 'K135' },
-  ];
-  const altLines = downgradeCandidates
-    .map((alt) => {
-      const res = calculateCartonPricing({
-        topLayer: alt.top,
-        midLayer: alt.mid,
-        botLayer: alt.bot,
-        flute: activeCalculationInput.flute === 'CB/F' ? 'B/F' : activeCalculationInput.flute,
-        marginPercent: activeCalculationInput.marginPercent,
-      });
-      if (!res.success) return '';
-      return `${alt.top}/${alt.mid}/${alt.bot} (${res.input.flute}) = ${formatRupiah(res.hargaBersihPerM2)}/M² (Downgrade -${res.totalDowngradePercent}%)`;
-    })
-    .filter(Boolean)
-    .join(' | ');
-
-  // Build Customer Context Block (Smart Mini-RAG: only inject full 103 list when needed or requested, saving ~80% tokens on normal turns!)
+  // Build Customer Context Block (Smart Mini-RAG)
   let customerRagBlock = `Total Customer Terdaftar: ${customers.length} Customer (Tier 1: ${tierCounts['Tier 1']}, Tier 2: ${tierCounts['Tier 2']}, Tier 3: ${tierCounts['Tier 3']}, Tier 4: ${tierCounts['Tier 4']})
 Customer Aktif di Kalkulator: ${
     activeCust
-      ? `${activeCust.name} (${activeCust.tier}, SW: ${activeCust.swMarginPercent > 0 ? `+${activeCust.swMarginPercent}%` : `${activeCust.swMarginPercent}%`}, DW: ${activeCust.dwMarginPercent > 0 ? `+${activeCust.dwMarginPercent}%` : `${activeCust.dwMarginPercent}%`})`
+      ? `${activeCust.name} (${activeCust.tier}, Diskon SW: ${activeCust.swMarginPercent > 0 ? `+${activeCust.swMarginPercent}%` : `${activeCust.swMarginPercent}%`}, Kolom 275 / E Flute: ${activeCust.dwMarginPercent > 0 ? `+${activeCust.dwMarginPercent}%` : `${activeCust.dwMarginPercent}%`})`
       : 'Manual (Tanpa Customer Spesifik)'
   }`;
 
@@ -306,7 +454,7 @@ Customer Aktif di Kalkulator: ${
     customerRagBlock += `\nHASIL PENCARIAN MINI-RAG CUSTOMER YANG COCOK DENGAN PERTANYAAN USER:\n${matchedCustomers
       .map(
         (c, i) =>
-          `${i + 1}. ${c.name} [${c.tier} | SW: ${c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`} | DW: ${c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`}]`
+          `${i + 1}. ${c.name} [${c.tier} | Diskon SW: ${c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`} | 275 / E Flute: ${c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`}]`
       )
       .join('\n')}`;
   }
@@ -315,29 +463,35 @@ Customer Aktif di Kalkulator: ${
     customerRagBlock += `\nDAFTAR CUSTOMER ${requestedTier?.toUpperCase()} (${tierFilteredCustomers.length} PT):\n${tierFilteredCustomers
       .map(
         (c, i) =>
-          `${i + 1}.${c.name}[SW:${c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`}|DW:${c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`}]`
+          `${i + 1}.${c.name}[SW:${c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`}|275/EF:${c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`}]`
       )
       .join('; ')}`;
   }
 
-  if (asksAllCustomers || ( /\b(customer|pt|cv|klien|pelanggan|diskon|tier)\b/i.test(qLower) && matchedCustomers.length === 0 && tierFilteredCustomers.length === 0 )) {
-    // Include compact full directory when user asks general customer questions without a specific match
+  if (
+    asksAllCustomers ||
+    (/\b(customer|pt|cv|klien|pelanggan|diskon|tier)\b/i.test(qLower) &&
+      matchedCustomers.length === 0 &&
+      tierFilteredCustomers.length === 0)
+  ) {
     const allRows = customers
       .map(
         (c, idx) =>
-          `${idx + 1}.${c.name}[${c.tier}|SW:${c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`}|DW:${c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`}]`
+          `${idx + 1}.${c.name}[${c.tier}|SW:${c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`}|275/EF:${c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`}]`
       )
       .join('; ');
     customerRagBlock += `\nDIREKTORI LENGKAP ${customers.length} CUSTOMER:\n${allRows}`;
   }
 
   const masterTableCompact = BASE_PRICE_TABLE.map(
-    (r) => `${r.no}.${r.substance}(BF:${r['B/F']},CF:${r['C/F']},EF:${r['E/F']},CBF:${r['CB/F']})`
+    (r) =>
+      `${r.no}.${r.substance}(BF:${r['B/F']},CF:${r['C/F']},EF:${r['E/F']},CBF:${
+        r['CB/F'] ?? 'TIDAK_ADA'
+      })`
   ).join('; ');
 
   return `[DETERMINISTIC PRE-CALCULATION ENGINE — 100% EXACT VERIFIED NUMBERS (GUNAKAN ANGKA INI SECARA LANGSUNG TANPA MENGHITUNG ULANG MANUAL)]
 ${deterministicPreCalcLines.join('\n')}
-• Opsi Alternatif Spesifikasi (Margin ${activeCalculationInput.marginPercent}%): ${altLines}
 
 [SMART MINI-RAG CUSTOMER & MASTER TABLE CONTEXT]
 ${customerRagBlock}
@@ -348,7 +502,10 @@ ${masterTableCompact}`;
 /**
  * 3. INSTANT RESPONSE CACHE (0ms Latency for Repeated Queries in the Same Context)
  */
-const SESSION_RESPONSE_CACHE = new Map<string, { content: string; reasoning?: string; modelUsed: string; timestamp: number }>();
+const SESSION_RESPONSE_CACHE = new Map<
+  string,
+  { content: string; reasoning?: string; modelUsed: string; timestamp: number }
+>();
 
 export function getCachedAIResponse(
   query: string,
@@ -358,7 +515,6 @@ export function getCachedAIResponse(
   const normalizedKey = `${roleId}::${calculatorSnapshot}::${query.trim().toLowerCase().replace(/\s+/g, ' ')}`;
   const hit = SESSION_RESPONSE_CACHE.get(normalizedKey);
   if (!hit) return null;
-  // Valid for 15 minutes in session
   if (Date.now() - hit.timestamp > 15 * 60 * 1000) {
     SESSION_RESPONSE_CACHE.delete(normalizedKey);
     return null;
@@ -381,7 +537,7 @@ export function setCachedAIResponse(
 }
 
 /**
- * 4. AUTO-RESIZE & SMART IMAGE COMPRESSION BEFORE UPLOAD (Reduces 5MB camera photos to ~120KB WebP/JPEG in <50ms)
+ * 4. AUTO-RESIZE & SMART IMAGE COMPRESSION BEFORE UPLOAD
  */
 export function compressImageFileToBase64(
   fileOrBlob: File | Blob,
@@ -395,7 +551,6 @@ export function compressImageFileToBase64(
       const rawDataUrl = String(ev.target?.result || '');
       const img = new Image();
       img.onerror = () => {
-        // Fallback to raw if image decode fails
         const commaIdx = rawDataUrl.indexOf(',');
         resolve({
           base64Data: commaIdx !== -1 ? rawDataUrl.slice(commaIdx + 1) : '',
@@ -464,8 +619,8 @@ export function buildUniversalSystemInstruction(
 - Current Application: "${ctx.appTitle}"
 - Active Calculator Spec & Price Snapshot: ${activeCalculatorSnapshot || 'Standar'}
 - CRITICAL ACCURACY & SPEED INSTRUCTION:
-  1. Di bawah ini terdapat bagian [DETERMINISTIC PRE-CALCULATION ENGINE] yang sudah menghitung harga eksak 100% menggunakan mesin TypeScript aplikasi untuk spesifikasi yang ditanyakan user maupun spesifikasi yang sedang aktif. WAJIB gunakan angka hasil hitungan eksak tersebut secara langsung! Jangan menghitung ulang secara kira-kira.
-  2. Anda mampu menjawab pertanyaan Database Customer (Tier 1–4, diskon SW/DW), Perhitungan Harga Karton Sheet (Tahap 1–6), maupun kombinasi keduanya secara instan dan ringkas.
+  1. Di bawah ini terdapat bagian [DETERMINISTIC PRE-CALCULATION ENGINE] yang sudah menghitung harga eksak 100% menggunakan mesin TypeScript Additive Architecture (Single Wall 3-Layer & Double Wall CB/F 5-Layer) untuk spesifikasi yang ditanyakan user maupun spesifikasi yang sedang aktif. WAJIB gunakan angka hasil hitungan eksak tersebut secara langsung! Jangan menghitung ulang secara kira-kira.
+  2. Anda mampu menjawab pertanyaan Database Customer (Tier 1–4, Diskon SW & Kolom 275 / E Flute), Perhitungan Harga Karton Sheet (Tahap 1–4 Additive Modifier), maupun kombinasi keduanya secara instan dan ringkas.
 
 ${customerDatabaseSnapshot ? `${customerDatabaseSnapshot}\n` : ''}
 [RICH OUTPUT, MATHEMATICAL LATEX & STRICT TABLE RESTRAINT RULES]
@@ -486,4 +641,3 @@ export function estimateTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
 }
-

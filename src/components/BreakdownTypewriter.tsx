@@ -18,79 +18,84 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
 }) => {
   const steps: BreakdownStepItem[] = useMemo(() => {
     const marginSign = result.marginPercent > 0 ? '+' : '';
-    const marginNominalSign = result.marginNominalRp >= 0 ? '+' : '-';
+    const modSign = result.totalAdditiveModifierPercent > 0 ? '+' : '';
+    const modNominalSign = result.totalAdditiveNominalRp >= 0 ? '+' : '-';
 
     const upgradeDesc =
       result.upgradeDetails.length === 0
-        ? 'Tidak ada tambahan nominal (+Rp 0)'
+        ? `Tidak ada tambahan nominal (+Rp 0) → Virtual Base: ${formatRupiah(result.virtualBase)}`
         : result.upgradeDetails
             .map((up) => `+${formatRupiah(up.amountRp)} (${up.reason})`)
             .join(' · ') + ` → Virtual Base: ${formatRupiah(result.virtualBase)}`;
 
     const downgradeDesc =
       result.downgradeDetails.length === 0
-        ? `Tidak ada penurunan ketebalan (0%) → ${formatRupiah(result.hargaDiskon, true)}`
-        : result.downgradeDetails.map((dw) => dw.reason).join(' · ') +
-          ` → Setelah diskon: ${formatRupiah(result.hargaDiskon, true)}`;
+        ? `Tidak ada penurunan ketebalan (0%)`
+        : result.downgradeDetails.map((dw) => dw.reason).join(' · ');
 
     const multiplierDesc =
       result.multiplierDetails.length === 0
         ? 'Tidak ada bahan 275 atau Flute E/F (0%)'
         : result.multiplierDetails
-            .map((m) => `+${m.percent}% (${m.label})`)
+            .map((m) => (m.percent > 0 ? `+${m.percent}% (${m.label})` : m.label))
             .join(' · ');
 
-    return [
+    const list: BreakdownStepItem[] = [
       {
         id: 1,
-        title: `1. Harga Dasar Acuan (#${result.baseRowNo})`,
-        detail: `${result.mappedReferenceSubstance} (${result.input.flute})${
-          result.autoSwapped ? ' · Auto-Swap' : ''
-        }`,
+        title: `1. Base Harga Tabel (#${result.baseRowNo})`,
+        detail: `${result.mappedReferenceSubstance} (${result.input.flute} · ${
+          result.isDoubleWall ? 'Double Wall 5-Layer' : 'Single Wall 3-Layer'
+        })${result.autoSwapped ? ' · Auto-Swap' : ''}`,
         valueText: formatRupiah(result.basePrice),
         tone: 'default',
       },
       {
         id: 2,
-        title: `2. Penambahan Spek (Virtual Base)`,
+        title: `2. Pembentukan Virtual Base (Nominal Rp)`,
         detail: upgradeDesc,
         valueText: `+${formatRupiah(result.totalNominalUpgrade)}`,
         tone: result.totalNominalUpgrade > 0 ? 'amber' : 'default',
       },
       {
         id: 3,
-        title: `3. Diskon Penurunan Spek (-${result.totalDowngradePercent}%)`,
-        detail: downgradeDesc,
-        valueText: `-${formatRupiah(result.discountNominalRp, true)}`,
-        tone: result.totalDowngradePercent > 0 ? 'emerald' : 'default',
+        title: `3. Sistem Modifier Persentase (Additive: ${modSign}${result.totalAdditiveModifierPercent}%)`,
+        detail: `Margin (${marginSign}${result.marginPercent}%) + Multiplier (+${result.totalMultiplierPercent}%: ${multiplierDesc}) - Diskon Downgrade (-${result.totalDowngradePercent}%: ${downgradeDesc})`,
+        valueText: `${modNominalSign}${formatRupiah(
+          Math.abs(result.totalAdditiveNominalRp),
+          true
+        )}`,
+        tone:
+          result.totalAdditiveModifierPercent < 0
+            ? 'emerald'
+            : result.totalAdditiveModifierPercent > 0
+            ? 'accent'
+            : 'default',
       },
       {
         id: 4,
-        title: `4. Diskon / Margin (${marginSign}${result.marginPercent}%)`,
-        detail: `${formatRupiah(result.hargaDiskon, true)} × ${(
-          1 + result.marginDecimal
-        ).toFixed(4)} = ${formatRupiah(result.hargaDenganMargin, true)}`,
-        valueText: `${marginNominalSign}${formatRupiah(
-          Math.abs(result.marginNominalRp),
-          true
-        )}`,
-        tone: result.marginNominalRp < 0 ? 'emerald' : 'default',
-      },
-      {
-        id: 5,
-        title: `5. Multiplier Khusus (+${result.totalMultiplierPercent}%)`,
-        detail: multiplierDesc,
-        valueText: `+${formatRupiah(result.multiplierNominalRp, true)}`,
-        tone: result.totalMultiplierPercent > 0 ? 'accent' : 'default',
-      },
-      {
-        id: 6,
-        title: `6. Pembulatan Akhir`,
-        detail: `Decimal: Rp ${result.hargaFinalMentah.toFixed(2)}`,
+        title: `4. Harga Bersih / M²`,
+        detail: `${formatRupiah(result.virtualBase)} × (1 ${
+          result.totalAdditiveModifierDecimal >= 0 ? '+' : '-'
+        } ${Math.abs(result.totalAdditiveModifierDecimal).toFixed(4)}) = Rp ${result.hargaFinalMentah.toFixed(2)}`,
         valueText: formatRupiah(result.hargaBersihPerM2),
         tone: 'accent',
       },
     ];
+
+    if (result.areaPerSheetM2 && result.hargaPerSheetRp !== undefined) {
+      list.push({
+        id: 5,
+        title: `5. Konversi Luas Area & Harga / Pcs`,
+        detail: `Luas (${result.input.sheetLengthMm} × ${result.input.sheetWidthMm} mm) = ${result.areaPerSheetM2.toFixed(
+          5
+        )} M² × ${formatRupiah(result.hargaBersihPerM2)}`,
+        valueText: formatRupiah(result.hargaPerSheetRp),
+        tone: 'accent',
+      });
+    }
+
+    return list;
   }, [result]);
 
   // Calculate total characters across all steps for smooth character-by-character AI streaming
@@ -111,9 +116,9 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
     setRevealedChars(0);
     let current = 0;
 
-    // Fast smooth character-by-character AI chatbot streaming effect (~3 chars per 12ms tick at 120Hz)
+    // Fast smooth character-by-character AI chatbot streaming effect (~4 chars per 12ms tick at 120Hz)
     const interval = setInterval(() => {
-      current += 3;
+      current += 4;
       if (current >= totalChars) {
         setRevealedChars(totalChars);
         clearInterval(interval);
@@ -123,7 +128,13 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
     }, 12);
 
     return () => clearInterval(interval);
-  }, [totalChars, result.inputSubstanceString, result.input.flute, result.marginPercent]);
+  }, [
+    totalChars,
+    result.inputSubstanceString,
+    result.input.flute,
+    result.marginPercent,
+    result.hargaPerSheetRp,
+  ]);
 
   const getValueColor = (tone?: BreakdownStepItem['tone']) => {
     if (tone === 'amber') return 'text-amber-700 dark:text-amber-400';

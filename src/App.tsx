@@ -17,6 +17,7 @@ import {
   calculateCartonPricing,
   formatRupiah,
   generateWhatsAppText,
+  resolveCustomerEffectiveMargin,
 } from './utils/pricingEngine';
 import { CustomPopoverDropdown } from './components/CustomPopoverDropdown';
 import { CustomerDiscountPicker } from './components/CustomerDiscountPicker';
@@ -64,67 +65,59 @@ const DEFAULT_FOLDERS: HistoryFolder[] = [
 const INITIAL_HISTORY_ITEMS: CalculationHistoryItem[] = [
   {
     id: 'preset-tc-1',
-    title: 'TC1 · Pure Downgrade + Margin 7.5%',
+    title: 'TC1 · Double Wall CB/F 5-Layer (+9.5%)',
     createdAt: Date.now() - 1000 * 60 * 45,
     pinned: true,
     folderId: 'all_quotes',
     input: {
-      topLayer: 'K110',
+      topLayer: 'K150',
+      flute1Layer: 'M100',
       midLayer: 'M100',
-      botLayer: 'K110',
-      flute: 'B/F',
-      marginPercent: 7.5,
+      flute2Layer: 'M100',
+      botLayer: 'K125',
+      flute: 'CB/F',
+      marginPercent: 9.5,
+      sheetLengthMm: 1860,
+      sheetWidthMm: 1161,
     },
-    finalPricePerM2: 4035,
-    substanceLabel: 'K110/M100/K110',
+    finalPricePerM2: 7166,
+    substanceLabel: 'K150/M100/M100/M100/K125',
   },
   {
     id: 'preset-tc-2',
-    title: 'TC2 · Mid Kraft K150 Upgrade (+Rp2.000)',
+    title: 'TC2 · Virtual Base + Multiplier Bertumpuk (E/F)',
     createdAt: Date.now() - 1000 * 60 * 120,
     pinned: false,
     folderId: 'heavy_duty',
     input: {
-      topLayer: 'K125',
+      topLayer: 'K275',
       midLayer: 'K150',
-      botLayer: 'K125',
-      flute: 'B/F',
-      marginPercent: 0,
+      botLayer: 'M100',
+      flute: 'E/F',
+      marginPercent: 5.0,
+      sheetLengthMm: 1000,
+      sheetWidthMm: 1000,
     },
-    finalPricePerM2: 6125,
-    substanceLabel: 'K125/K150/K125',
+    finalPricePerM2: 8522,
+    substanceLabel: 'K275/K150/M100',
   },
   {
     id: 'preset-tc-3',
-    title: 'TC3 · Multiplier Bertumpuk 275 & E/F',
+    title: 'TC3 · Virtual Base M135 (Turunan M150)',
     createdAt: Date.now() - 1000 * 60 * 180,
-    pinned: false,
-    folderId: 'heavy_duty',
-    input: {
-      topLayer: 'K275',
-      midLayer: 'M125',
-      botLayer: 'M100',
-      flute: 'E/F',
-      marginPercent: 0,
-    },
-    finalPricePerM2: 6106,
-    substanceLabel: 'K275/M125/M100',
-  },
-  {
-    id: 'preset-tc-5',
-    title: 'TC5 · Virtual Base M135/M135/M135',
-    createdAt: Date.now() - 1000 * 60 * 240,
     pinned: false,
     folderId: 'reguler_sw',
     input: {
-      topLayer: 'M135',
+      topLayer: 'K125',
       midLayer: 'M135',
-      botLayer: 'M135',
+      botLayer: 'K110',
       flute: 'B/F',
-      marginPercent: 0,
+      marginPercent: 8.0,
+      sheetLengthMm: 1000,
+      sheetWidthMm: 1000,
     },
-    finalPricePerM2: 4506,
-    substanceLabel: 'M135/M135/M135',
+    finalPricePerM2: 4580,
+    substanceLabel: 'K125/M135/K110',
   },
 ];
 
@@ -272,27 +265,54 @@ export default function App() {
     }
   }, [customers]);
 
-  // Pricing Calculator Form State
-  const [topLayer, setTopLayer] = useState<OuterLayerMaterial>('K110');
+  // Pricing Calculator Form State (Supports 3-Layer Single Wall & 5-Layer Double Wall CB/F)
+  const [topLayer, setTopLayer] = useState<OuterLayerMaterial>('K150');
+  const [flute1Layer, setFlute1Layer] = useState<MidLayerMaterial>('M100');
   const [midLayer, setMidLayer] = useState<MidLayerMaterial>('M100');
-  const [botLayer, setBotLayer] = useState<OuterLayerMaterial>('K110');
-  const [flute, setFlute] = useState<FluteType>('B/F');
-  const [marginStr, setMarginStr] = useState<string>('7.5');
+  const [flute2Layer, setFlute2Layer] = useState<MidLayerMaterial>('M100');
+  const [botLayer, setBotLayer] = useState<OuterLayerMaterial>('K125');
+  const [flute, setFlute] = useState<FluteType>('CB/F');
+  const [marginStr, setMarginStr] = useState<string>('9.5');
   const [quoteTitle, setQuoteTitle] = useState<string>('');
 
-  // Hide/Show toggles (Default HIDE as requested)
+  // Hide/Show toggles (Default HIDE for breakdown & WhatsApp; Sheet Dimensions visible for Pcs)
   const [showOrderBreakdown, setShowOrderBreakdown] = useState<boolean>(false);
   const [showWhatsAppSection, setShowWhatsAppSection] = useState<boolean>(false);
-  const [showSheetConverter, setShowSheetConverter] = useState<boolean>(false);
+  const [showSheetConverter, setShowSheetConverter] = useState<boolean>(true);
 
-  const [sheetLengthStr, setSheetLengthStr] = useState<string>('');
-  const [sheetWidthStr, setSheetWidthStr] = useState<string>('');
+  const [sheetLengthStr, setSheetLengthStr] = useState<string>('1860');
+  const [sheetWidthStr, setSheetWidthStr] = useState<string>('1161');
   const [quantityStr, setQuantityStr] = useState<string>('');
 
   // WhatsApp Copy State
   const [waFormatMode, setWaFormatMode] = useState<'ringkas' | 'lengkap'>('ringkas');
   const [copiedWa, setCopiedWa] = useState<boolean>(false);
   const [savedNotice, setSavedNotice] = useState<boolean>(false);
+
+  const activeCustomer = useMemo(
+    () => customers.find((c) => c.id === selectedCustomerId) || null,
+    [customers, selectedCustomerId]
+  );
+
+  // Hybrid Opsi A: Automatically switch between Customer's SW Margin vs "275 / E Flute" Margin
+  // when a Customer is selected and the spec changes to/from K275 or E/F!
+  const customerMarginResolution = useMemo(() => {
+    if (!activeCustomer) return null;
+    return resolveCustomerEffectiveMargin(activeCustomer, {
+      topLayer,
+      flute1Layer,
+      midLayer,
+      flute2Layer,
+      botLayer,
+      flute,
+    });
+  }, [activeCustomer, topLayer, flute1Layer, midLayer, flute2Layer, botLayer, flute]);
+
+  useEffect(() => {
+    if (customerMarginResolution) {
+      setMarginStr(String(customerMarginResolution.effectiveMarginPercent));
+    }
+  }, [customerMarginResolution]);
 
   // Construct PricingInput & run real-time calculation (supports negative or positive margin)
   const currentInput: PricingInput = useMemo(() => {
@@ -303,30 +323,31 @@ export default function App() {
 
     return {
       topLayer,
+      flute1Layer: flute === 'CB/F' ? flute1Layer : undefined,
       midLayer,
+      flute2Layer: flute === 'CB/F' ? flute2Layer : undefined,
       botLayer,
       flute,
       marginPercent: Number.isFinite(parsedMargin) ? parsedMargin : 0,
+      customerSpecial275EfOverrideActive: Boolean(
+        customerMarginResolution?.customerSpecial275EfOverrideActive
+      ),
       sheetLengthMm:
-        showSheetConverter && Number.isFinite(parsedLength) && parsedLength > 0
-          ? parsedLength
-          : undefined,
+        Number.isFinite(parsedLength) && parsedLength > 0 ? parsedLength : undefined,
       sheetWidthMm:
-        showSheetConverter && Number.isFinite(parsedWidth) && parsedWidth > 0
-          ? parsedWidth
-          : undefined,
+        Number.isFinite(parsedWidth) && parsedWidth > 0 ? parsedWidth : undefined,
       quantityPcs:
-        showSheetConverter && Number.isFinite(parsedQty) && parsedQty > 0
-          ? parsedQty
-          : undefined,
+        Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : undefined,
     };
   }, [
     topLayer,
+    flute1Layer,
     midLayer,
+    flute2Layer,
     botLayer,
     flute,
     marginStr,
-    showSheetConverter,
+    customerMarginResolution,
     sheetLengthStr,
     sheetWidthStr,
     quantityStr,
@@ -347,7 +368,9 @@ export default function App() {
     setActiveHistoryId(item.id);
     setSelectedCustomerId(null);
     setTopLayer(item.input.topLayer);
+    if (item.input.flute1Layer) setFlute1Layer(item.input.flute1Layer);
     setMidLayer(item.input.midLayer);
+    if (item.input.flute2Layer) setFlute2Layer(item.input.flute2Layer);
     setBotLayer(item.input.botLayer);
     setFlute(item.input.flute);
     setMarginStr(String(item.input.marginPercent));
@@ -357,15 +380,21 @@ export default function App() {
       setSheetLengthStr(String(item.input.sheetLengthMm));
       setSheetWidthStr(String(item.input.sheetWidthMm));
       setQuantityStr(item.input.quantityPcs ? String(item.input.quantityPcs) : '');
-    } else {
-      setShowSheetConverter(false);
     }
     setActiveTab('calculator');
   };
 
   const handleSelectCustomer = (customer: CustomerDiscountItem) => {
     setSelectedCustomerId(customer.id);
-    setMarginStr(String(customer.swMarginPercent));
+    const resolved = resolveCustomerEffectiveMargin(customer, {
+      topLayer,
+      flute1Layer,
+      midLayer,
+      flute2Layer,
+      botLayer,
+      flute,
+    });
+    setMarginStr(String(resolved.effectiveMarginPercent));
     setQuoteTitle(customer.name);
     setActiveTab('calculator');
   };
@@ -384,7 +413,15 @@ export default function App() {
       prev.map((c) => (c.id === updated.id ? updated : c))
     );
     if (selectedCustomerId === updated.id) {
-      setMarginStr(String(updated.swMarginPercent));
+      const resolved = resolveCustomerEffectiveMargin(updated, {
+        topLayer,
+        flute1Layer,
+        midLayer,
+        flute2Layer,
+        botLayer,
+        flute,
+      });
+      setMarginStr(String(resolved.effectiveMarginPercent));
       setQuoteTitle(updated.name);
     }
   };
@@ -420,14 +457,16 @@ export default function App() {
   const handleResetNewCalculation = () => {
     setActiveHistoryId(null);
     setSelectedCustomerId(null);
-    setTopLayer('M125');
+    setTopLayer('K125');
+    setFlute1Layer('M125');
     setMidLayer('M125');
-    setBotLayer('M125');
+    setFlute2Layer('M125');
+    setBotLayer('K125');
     setFlute('B/F');
     setMarginStr('0');
     setQuoteTitle('');
-    setSheetLengthStr('');
-    setSheetWidthStr('');
+    setSheetLengthStr('1000');
+    setSheetWidthStr('1000');
     setQuantityStr('');
     setActiveTab('calculator');
   };
@@ -436,10 +475,18 @@ export default function App() {
     setActiveHistoryId(null);
     setSelectedCustomerId(null);
     setTopLayer(input.topLayer);
+    if (input.flute1Layer) setFlute1Layer(input.flute1Layer);
     setMidLayer(input.midLayer);
+    if (input.flute2Layer) setFlute2Layer(input.flute2Layer);
     setBotLayer(input.botLayer);
     setFlute(input.flute);
     setMarginStr(String(input.marginPercent));
+    if (input.sheetLengthMm && input.sheetWidthMm) {
+      setShowSheetConverter(true);
+      setSheetLengthStr(String(input.sheetLengthMm));
+      setSheetWidthStr(String(input.sheetWidthMm));
+      setQuantityStr(input.quantityPcs ? String(input.quantityPcs) : '');
+    }
     setQuoteTitle(title);
     setActiveTab('calculator');
   };
@@ -520,7 +567,6 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const activeCustomer = customers.find((c) => c.id === selectedCustomerId);
   const activeAiThread =
     aiThreads.find((t) => t.id === activeAiThreadId) || aiThreads[0] || INITIAL_AI_THREADS[0];
 
@@ -802,7 +848,9 @@ export default function App() {
                 }
                 onApplySpecToCalculator={(spec, custId, title) => {
                   if (spec.topLayer) setTopLayer(spec.topLayer);
+                  if (spec.flute1Layer) setFlute1Layer(spec.flute1Layer);
                   if (spec.midLayer) setMidLayer(spec.midLayer);
+                  if (spec.flute2Layer) setFlute2Layer(spec.flute2Layer);
                   if (spec.botLayer) setBotLayer(spec.botLayer);
                   if (spec.flute) setFlute(spec.flute);
                   if (typeof spec.marginPercent === 'number') {
@@ -868,46 +916,104 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* 3 Layer Custom Popover Dropdowns (Clean IDs only) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <CustomPopoverDropdown
-                          label="Top Layer"
-                          value={topLayer}
-                          options={OUTER_LAYER_OPTIONS}
-                          groups={['Medium', 'Kraft']}
-                          onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
-                        />
+                      {/* Conditional Layer Dropdowns: 5 Dropdowns for Double Wall (CB/F) vs 3 Dropdowns for Single Wall */}
+                      {flute === 'CB/F' ? (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between text-[10.5px] font-mono text-[#C65D3B]">
+                            <span>Mode Double Wall (CB/F · 5 Layer: Top / Flute 1 / Mid / Flute 2 / Bottom)</span>
+                            <span>Acuan: {topLayer}/M125/{botLayer}</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                            <CustomPopoverDropdown
+                              label="Top"
+                              value={topLayer}
+                              options={OUTER_LAYER_OPTIONS}
+                              groups={['Medium', 'Kraft']}
+                              onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
+                            />
 
-                        <CustomPopoverDropdown
-                          label="Middle Layer"
-                          value={midLayer}
-                          options={MID_LAYER_OPTIONS}
-                          groups={['Medium', 'Kraft']}
-                          warningNote="Tanpa K110, K125, K135 sesuai SOP."
-                          onChange={(val) => setMidLayer(val as MidLayerMaterial)}
-                        />
+                            <CustomPopoverDropdown
+                              label="Flute 1"
+                              value={flute1Layer}
+                              options={MID_LAYER_OPTIONS}
+                              groups={['Medium', 'Kraft']}
+                              warningNote="Inner Layer: Tanpa K110, K125, K135."
+                              onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
+                            />
 
-                        <CustomPopoverDropdown
-                          label="Bottom Layer"
-                          value={botLayer}
-                          options={OUTER_LAYER_OPTIONS}
-                          groups={['Medium', 'Kraft']}
-                          align="right"
-                          onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
-                        />
-                      </div>
+                            <CustomPopoverDropdown
+                              label="Mid"
+                              value={midLayer}
+                              options={MID_LAYER_OPTIONS}
+                              groups={['Medium', 'Kraft']}
+                              warningNote="Inner Layer: Tanpa K110, K125, K135."
+                              onChange={(val) => setMidLayer(val as MidLayerMaterial)}
+                            />
 
-                      {/* Flute 1-Row Inline Selector (B/F, C/F, E/F — No Double Wall text, no extra description) */}
+                            <CustomPopoverDropdown
+                              label="Flute 2"
+                              value={flute2Layer}
+                              options={MID_LAYER_OPTIONS}
+                              groups={['Medium', 'Kraft']}
+                              warningNote="Inner Layer: Tanpa K110, K125, K135."
+                              onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
+                            />
+
+                            <CustomPopoverDropdown
+                              label="Bottom"
+                              value={botLayer}
+                              options={OUTER_LAYER_OPTIONS}
+                              groups={['Medium', 'Kraft']}
+                              align="right"
+                              onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <CustomPopoverDropdown
+                            label="Top Layer"
+                            value={topLayer}
+                            options={OUTER_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
+                          />
+
+                          <CustomPopoverDropdown
+                            label="Middle Layer"
+                            value={midLayer}
+                            options={MID_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            warningNote="Tanpa K110, K125, K135 sesuai SOP."
+                            onChange={(val) => setMidLayer(val as MidLayerMaterial)}
+                          />
+
+                          <CustomPopoverDropdown
+                            label="Bottom Layer"
+                            value={botLayer}
+                            options={OUTER_LAYER_OPTIONS}
+                            groups={['Medium', 'Kraft']}
+                            align="right"
+                            onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Flute 1-Row Selector (B/F, C/F, E/F, CB/F) */}
                       <div className="pt-2 border-t border-black/5 dark:border-white/5">
                         <div className="flex items-baseline justify-between mb-1.5">
                           <label className="text-xs font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tracking-tight">
                             Flute
                           </label>
                           <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500">
-                            {flute === 'E/F' ? 'Multiplier +2%' : 'Reguler'}
+                            {flute === 'CB/F'
+                              ? 'Double Wall (5-Layer)'
+                              : flute === 'E/F'
+                              ? 'Single Wall · Multiplier +2%'
+                              : 'Single Wall (3-Layer)'}
                           </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                           {FLUTE_OPTIONS.map((fOpt) => {
                             const isSelected = flute === fOpt.id;
                             return (
@@ -918,7 +1024,7 @@ export default function App() {
                                   triggerHaptic('medium');
                                   setFlute(fOpt.id);
                                 }}
-                                className={`py-2 px-3 rounded-md font-mono text-xs font-semibold border transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 ${
+                                className={`py-2 px-2.5 rounded-md font-mono text-xs font-semibold border transition-all duration-150 cursor-pointer flex items-center justify-center gap-1 ${
                                   isSelected
                                     ? 'bg-[#C65D3B] border-[#C65D3B] text-white'
                                     : 'bg-[#FFFFFF] dark:bg-[#161311] border-black/10 dark:border-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] hover:bg-neutral-50 dark:hover:bg-[#1e1b18]'
@@ -927,7 +1033,7 @@ export default function App() {
                                 <span>{fOpt.id}</span>
                                 {fOpt.tag && (
                                   <span
-                                    className={`text-[10px] font-normal ${
+                                    className={`text-[9.5px] font-normal hidden sm:inline ${
                                       isSelected
                                         ? 'text-white/85'
                                         : 'text-neutral-400 dark:text-neutral-500'
@@ -944,18 +1050,22 @@ export default function App() {
 
                       {/* Diskon / Margin (%) + Inline Customer Database Picker */}
                       <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-2">
-                        <div className="flex items-baseline justify-between">
+                        <div className="flex items-baseline justify-between gap-2">
                           <label className="text-xs font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tracking-tight">
                             Diskon / Margin (%)
                           </label>
-                          <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums">
+                          <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums text-right">
                             {currentInput.marginPercent < 0
                               ? `Potongan Harga (${currentInput.marginPercent}%)`
                               : currentInput.marginPercent > 0
                               ? `Mark-Up Harga (+${currentInput.marginPercent}%)`
                               : 'Harga Normal (0%)'}
-                            {activeCustomer
-                              ? ` · DW Ref: ${activeCustomer.dwMarginPercent > 0 ? '+' : ''}${activeCustomer.dwMarginPercent}%`
+                            {activeCustomer && customerMarginResolution
+                              ? ` · ${customerMarginResolution.modeLabel} (SW: ${
+                                  activeCustomer.swMarginPercent > 0 ? '+' : ''
+                                }${activeCustomer.swMarginPercent}% | 275/EF: ${
+                                  activeCustomer.dwMarginPercent > 0 ? '+' : ''
+                                }${activeCustomer.dwMarginPercent}%)`
                               : ''}
                           </span>
                         </div>
@@ -1178,7 +1288,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Compact Summary Strip (Always visible) */}
+                        {/* Compact Summary Strip (Always visible — Additive Architecture) */}
                         <div className="grid grid-cols-3 gap-2 p-2.5 rounded-md bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5 text-[10.5px] font-mono tabular-nums">
                           <div>
                             <span className="block text-[9.5px] text-neutral-400">
@@ -1190,7 +1300,7 @@ export default function App() {
                           </div>
                           <div>
                             <span className="block text-[9.5px] text-neutral-400">
-                              Downgrade
+                              Downgrade ({calculationResult.isDoubleWall ? 'DW' : 'SW'})
                             </span>
                             <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                               -{calculationResult.totalDowngradePercent}%
@@ -1198,50 +1308,51 @@ export default function App() {
                           </div>
                           <div>
                             <span className="block text-[9.5px] text-neutral-400">
-                              Diskon/Margin
+                              Total Modifier
                             </span>
                             <span
                               className={`font-semibold ${
-                                calculationResult.marginPercent < 0
+                                calculationResult.totalAdditiveModifierPercent < 0
                                   ? 'text-emerald-600 dark:text-emerald-400'
                                   : 'text-[#C65D3B]'
                               }`}
                             >
-                              {calculationResult.marginPercent > 0 ? '+' : ''}
-                              {calculationResult.marginPercent}%
+                              {calculationResult.totalAdditiveModifierPercent > 0 ? '+' : ''}
+                              {calculationResult.totalAdditiveModifierPercent}%
                             </span>
                           </div>
                         </div>
 
-                        {/* Optional Sheet Area Result */}
-                        {calculationResult.areaPerSheetM2 && calculationResult.hargaPerSheetRp && (
-                          <div className="p-3 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] space-y-1 font-mono text-xs tabular-nums">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="text-neutral-500">
-                                Luas ({currentInput.sheetLengthMm}×{currentInput.sheetWidthMm} mm):
-                              </span>
-                              <span className="font-semibold">
-                                {calculationResult.areaPerSheetM2.toFixed(4)} M²
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="text-neutral-500">Harga / Lembar:</span>
-                              <span className="font-bold text-[#C65D3B]">
-                                {formatRupiah(calculationResult.hargaPerSheetRp)}
-                              </span>
-                            </div>
-                            {calculationResult.totalOrderRp && currentInput.quantityPcs && (
-                              <div className="flex items-center justify-between pt-1 border-t border-black/8 dark:border-white/10">
-                                <span className="font-semibold text-[11px]">
-                                  Total ({currentInput.quantityPcs.toLocaleString('id-ID')} pcs):
+                        {/* Sheet Area & Harga / Pcs Result */}
+                        {calculationResult.areaPerSheetM2 &&
+                          calculationResult.hargaPerSheetRp !== undefined && (
+                            <div className="p-3 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] space-y-1 font-mono text-xs tabular-nums">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-neutral-500">
+                                  Luas ({currentInput.sheetLengthMm}×{currentInput.sheetWidthMm} mm):
                                 </span>
-                                <span className="font-bold text-xs">
-                                  {formatRupiah(calculationResult.totalOrderRp)}
+                                <span className="font-semibold">
+                                  {calculationResult.areaPerSheetM2.toFixed(5)} M²
                                 </span>
                               </div>
-                            )}
-                          </div>
-                        )}
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-neutral-500">Harga / Pcs (Lembar):</span>
+                                <span className="font-bold text-[#C65D3B]">
+                                  {formatRupiah(calculationResult.hargaPerSheetRp)}
+                                </span>
+                              </div>
+                              {calculationResult.totalOrderRp && currentInput.quantityPcs && (
+                                <div className="flex items-center justify-between pt-1 border-t border-black/8 dark:border-white/10">
+                                  <span className="font-semibold text-[11px]">
+                                    Total ({currentInput.quantityPcs.toLocaleString('id-ID')} pcs):
+                                  </span>
+                                  <span className="font-bold text-xs">
+                                    {formatRupiah(calculationResult.totalOrderRp)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                         {/* Collapsible 1: Rincian Order — Default Hidden */}
                         <div className="pt-1 border-t border-black/6 dark:border-white/8">
