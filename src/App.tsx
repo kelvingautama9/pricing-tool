@@ -800,6 +800,22 @@ export default function App() {
                     prev.map((t) => (t.id === activeAiThread.id ? updater(t) : t))
                   )
                 }
+                onApplySpecToCalculator={(spec, custId, title) => {
+                  if (spec.topLayer) setTopLayer(spec.topLayer);
+                  if (spec.midLayer) setMidLayer(spec.midLayer);
+                  if (spec.botLayer) setBotLayer(spec.botLayer);
+                  if (spec.flute) setFlute(spec.flute);
+                  if (typeof spec.marginPercent === 'number') {
+                    setMarginStr(String(spec.marginPercent));
+                  }
+                  if (custId !== undefined) {
+                    setSelectedCustomerId(custId);
+                  }
+                  if (title) {
+                    setQuoteTitle(title);
+                  }
+                  setActiveTab('calculator');
+                }}
               />
             ) : activeTab !== 'calculator' ? (
               <MasterTableAndTests

@@ -46,11 +46,20 @@ import {
   extractCodeArtifact,
   DetectedArtifact,
 } from '../utils/aiEngine';
-import { estimateTokens } from '../utils/contextSniffer';
+import {
+  estimateTokens,
+  buildSmartRagAndPreCalcContext,
+  getCachedAIResponse,
+  setCachedAIResponse,
+  compressImageFileToBase64,
+  extractSpecsFromText,
+  DetectedSpecAction,
+} from '../utils/contextSniffer';
 import { triggerHaptic } from '../utils/hapticsAndImport';
 import {
   PricingCalculationResult,
-  CustomerAccount,
+  PricingInput,
+  CustomerDiscountItem,
   BASE_PRICE_TABLE,
   formatRupiah,
 } from '../utils/pricingEngine';
@@ -58,10 +67,11 @@ import { RichMessageContent } from './RichMessageContent';
 
 interface AIChatWorkspaceProps {
   activeCalculation: PricingCalculationResult;
-  customers: CustomerAccount[];
-  selectedCustomerId: string;
+  customers: CustomerDiscountItem[];
+  selectedCustomerId: string | null;
   activeThread: ChatThread;
   onUpdateThread: (updater: (thread: ChatThread) => ChatThread) => void;
+  onApplySpecToCalculator?: (spec: Partial<PricingInput>, customerId?: string | null, title?: string) => void;
 }
 
 const STORAGE_KEY_AI_ROLES = 'mypak_ai_roles_v2';
@@ -73,6 +83,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   selectedCustomerId,
   activeThread,
   onUpdateThread,
+  onApplySpecToCalculator,
 }) => {
   // 1. Model & Provider State
   const [selectedModelId, setSelectedModelId] = useState<string>('gemini-2.5-flash');
@@ -342,27 +353,26 @@ ${masterTableRows}`;
       const ext = file.name.split('.').pop()?.toLowerCase() || 'txt';
       const sizeLabel = formatFileSize(file.size);
 
-      // 1. Image / Photo from Gallery or Camera
+      // 1. Image / Photo from Gallery or Camera -> Auto-Resize & Smart WebP/JPEG Compression (<150KB)
       if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const dataUrl = String(ev.target?.result || '');
-          const commaIdx = dataUrl.indexOf(',');
-          if (commaIdx !== -1) {
-            const base64Data = dataUrl.slice(commaIdx + 1);
-            setAttachedImages((prev) => [
-              ...prev,
-              {
-                id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                name: file.name,
-                mimeType: file.type || 'image/png',
-                data: base64Data,
-                previewUrl: dataUrl,
-              },
-            ]);
-          }
-        };
-        reader.readAsDataURL(file);
+        compressImageFileToBase64(file, 1280, 0.82)
+          .then((compressed) => {
+            if (compressed.base64Data) {
+              setAttachedImages((prev) => [
+                ...prev,
+                {
+                  id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  name: file.name,
+                  mimeType: compressed.mimeType,
+                  data: compressed.base64Data,
+                  previewUrl: compressed.previewUrl,
+                },
+              ]);
+            }
+          })
+          .catch(() => {
+            // Ignore
+          });
         return;
       }
 
@@ -528,14 +538,27 @@ ${masterTableRows}`;
     if (!videoEl || !videoEl.videoWidth) return;
     triggerHaptic('success');
 
+    const maxDim = 1280;
+    let width = videoEl.videoWidth;
+    let height = videoEl.videoHeight;
+    if (width > maxDim || height > maxDim) {
+      if (width >= height) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+    }
+
     const canvas = document.createElement('canvas');
-    canvas.width = videoEl.videoWidth;
-    canvas.height = videoEl.videoHeight;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
     const commaIdx = dataUrl.indexOf(',');
     if (commaIdx !== -1) {
       setAttachedImages((prev) => [
@@ -552,7 +575,7 @@ ${masterTableRows}`;
     handleCloseCameraModal();
   };
 
-  // Clipboard Paste Image Support
+  // Clipboard Paste Image Support (with Smart Compression)
   const handleTextareaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items;
     if (!items) return;
@@ -564,24 +587,24 @@ ${masterTableRows}`;
         const blob = item.getAsFile();
         if (!blob) continue;
 
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const dataUrl = String(ev.target?.result || '');
-          const commaIdx = dataUrl.indexOf(',');
-          if (commaIdx !== -1) {
-            setAttachedImages((prev) => [
-              ...prev,
-              {
-                id: `paste-${Date.now()}`,
-                name: 'clipboard-screenshot.png',
-                mimeType: blob.type || 'image/png',
-                data: dataUrl.slice(commaIdx + 1),
-                previewUrl: dataUrl,
-              },
-            ]);
-          }
-        };
-        reader.readAsDataURL(blob);
+        compressImageFileToBase64(blob, 1280, 0.82)
+          .then((compressed) => {
+            if (compressed.base64Data) {
+              setAttachedImages((prev) => [
+                ...prev,
+                {
+                  id: `paste-${Date.now()}`,
+                  name: 'clipboard-screenshot.jpg',
+                  mimeType: compressed.mimeType,
+                  data: compressed.base64Data,
+                  previewUrl: compressed.previewUrl,
+                },
+              ]);
+            }
+          })
+          .catch(() => {
+            // Ignore
+          });
       }
     }
   };
@@ -649,6 +672,58 @@ ${masterTableRows}`;
       setAttachedImages([]);
       setAttachedFiles([]);
     }
+
+    // 3. INSTANT RESPONSE CACHE CHECK (0ms Latency for repeated queries with identical context)
+    const canUseCache =
+      Boolean(textToSend) &&
+      !userMsg.images?.length &&
+      !userMsg.files?.length &&
+      !useSearchGrounding;
+    const cachedHit = canUseCache
+      ? getCachedAIResponse(textToSend, calculatorSnapshot, activeRoleObj.id)
+      : null;
+
+    if (cachedHit) {
+      setIsStreaming(true);
+      let idx = 0;
+      const fullText = cachedHit.content;
+      const tickCached = () => {
+        idx = Math.min(fullText.length, idx + 110);
+        onUpdateThread((t) => ({
+          ...t,
+          messages: t.messages.map((m) =>
+            m.id === assistantSlotId
+              ? {
+                  ...m,
+                  content: fullText.slice(0, idx),
+                  reasoning: cachedHit.reasoning,
+                  modelUsed: `${cachedHit.modelUsed} · Instant Cache`,
+                  isStreaming: idx < fullText.length,
+                }
+              : m
+          ),
+        }));
+        if (!userScrolledUpRef.current) {
+          scrollToBottom(false, false);
+        }
+        if (idx < fullText.length) {
+          requestAnimationFrame(tickCached);
+        } else {
+          setIsStreaming(false);
+          triggerHaptic('success');
+        }
+      };
+      requestAnimationFrame(tickCached);
+      return;
+    }
+
+    // 1 & 2. SMART CONTEXT ROUTER (MINI-RAG) + DETERMINISTIC PRE-CALCULATION ENGINE
+    const smartDynamicContext = buildSmartRagAndPreCalcContext(
+      userMsg.content,
+      customers,
+      selectedCustomerId,
+      activeCalculation.input
+    );
 
     setIsStreaming(true);
     const controller = new AbortController();
@@ -759,7 +834,7 @@ ${masterTableRows}`;
         systemPrompt: `${activeRoleObj.prompt}${modeDirectives}`,
         activeRolePrompt: `${activeRoleObj.prompt}${modeDirectives}`,
         activeCalculatorSnapshot: calculatorSnapshot,
-        customerDatabaseSnapshot,
+        customerDatabaseSnapshot: smartDynamicContext,
         useSearchGrounding,
         useDeepReasoning,
       },
@@ -805,6 +880,13 @@ ${masterTableRows}`;
         },
         onComplete: () => {
           networkStreamDone = true;
+          if (canUseCache && targetText.length > 20) {
+            setCachedAIResponse(textToSend, calculatorSnapshot, activeRoleObj.id, {
+              content: targetText,
+              reasoning: accumulatedReasoning || undefined,
+              modelUsed: targetModelObj.id,
+            });
+          }
           if (controller.signal.aborted || targetText.length === 0) {
             if (rafId !== null) cancelAnimationFrame(rafId);
             setIsStreaming(false);
@@ -1332,6 +1414,46 @@ ${masterTableRows}`;
                       isUser={isUser}
                       userPromptText={prevUserPrompt}
                     />
+
+                    {/* 5. DIRECT CALCULATOR ACTION CHIPS (Interactive AI Actions) */}
+                    {!isUser && !msg.isStreaming && onApplySpecToCalculator && (() => {
+                      const detectedSpecs: DetectedSpecAction[] = extractSpecsFromText(
+                        msg.content,
+                        activeCalculation.input.flute,
+                        activeCalculation.input.marginPercent
+                      );
+                      if (detectedSpecs.length === 0) return null;
+                      return (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                          {detectedSpecs.map((specItem) => (
+                            <button
+                              key={`${specItem.label}-${specItem.pricePerM2}`}
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('medium');
+                                onApplySpecToCalculator(
+                                  {
+                                    topLayer: specItem.topLayer,
+                                    midLayer: specItem.midLayer,
+                                    botLayer: specItem.botLayer,
+                                    flute: specItem.flute,
+                                  },
+                                  undefined,
+                                  `AI · ${specItem.topLayer}/${specItem.midLayer}/${specItem.botLayer}`
+                                );
+                              }}
+                              title="Terapkan spesifikasi ini langsung ke Kalkulator Utama"
+                              className="px-2 py-1 rounded-xs bg-[#C65D3B]/10 hover:bg-[#C65D3B] text-[#C65D3B] hover:text-white border border-[#C65D3B]/30 text-[10.5px] font-mono font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Zap className="w-3 h-3 shrink-0" />
+                              <span>
+                                Terapkan {specItem.label} · {formatRupiah(specItem.pricePerM2)}/M²
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
 
                     {!isUser && !msg.isStreaming && (
                       <div className="mt-2.5 pt-1.5 border-t border-black/6 dark:border-white/8 flex items-center justify-between gap-2 text-[9.5px] font-mono text-neutral-400">
