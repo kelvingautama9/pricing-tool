@@ -480,8 +480,8 @@ const ResponsiveMarkdownTable: React.FC<{ rows: string[][] }> = ({ rows }) => {
         </div>
       )}
 
-      {/* Scrollable Responsive Table */}
-      <div className="w-full overflow-x-auto custom-scrollbar">
+      {/* Scrollable Responsive Table (overflow-y-visible so vertical mouse wheel never gets trapped) */}
+      <div className="w-full overflow-x-auto overflow-y-visible custom-scrollbar">
         <table className="w-full border-collapse text-left text-[11.5px]">
           <thead>
             <tr className="bg-[#F9F9F9] dark:bg-[#1d1c1a] border-b border-black/8 dark:border-white/10">

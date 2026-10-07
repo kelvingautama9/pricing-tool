@@ -255,20 +255,40 @@ ${masterTableRows}`;
     }
     if (!force && userScrolledUpRef.current) return;
 
+    const targetTop = container.scrollHeight - container.clientHeight;
+    if (targetTop <= 0) return;
+
     if (smooth) {
       container.scrollTo({
-        top: container.scrollHeight,
+        top: targetTop,
         behavior: 'smooth',
       });
     } else {
-      // Smooth 60-120fps interpolation during live AI typing so viewport glides with output
-      const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
-      if (distance > 1) {
-        if (distance > 180) {
-          container.scrollTop = container.scrollHeight - container.clientHeight;
+      // Immersive 120Hz camera-follow: smoothly glides down and locks to the newest generated line
+      const distance = targetTop - container.scrollTop;
+      if (distance > 0.5) {
+        if (distance > 260) {
+          container.scrollTop = targetTop - 40;
         } else {
-          container.scrollTop += Math.max(2, distance * 0.35);
+          container.scrollTop += Math.max(4, distance * 0.48);
         }
+      }
+    }
+  };
+
+  // Only pause auto-follow when the user physically scrolls UP with mouse wheel or touch
+  const handleUserWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const container = messagesScrollContainerRef.current;
+    if (!container) return;
+    if (e.deltaY < -4) {
+      userScrolledUpRef.current = true;
+      setShowScrollToBottomBtn(true);
+    } else if (e.deltaY > 4) {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (distanceFromBottom < 80) {
+        userScrolledUpRef.current = false;
+        setShowScrollToBottomBtn(false);
       }
     }
   };
@@ -278,9 +298,16 @@ ${masterTableRows}`;
     if (!container) return;
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isScrolledUp = distanceFromBottom > 95;
-    userScrolledUpRef.current = isScrolledUp;
-    setShowScrollToBottomBtn(isScrolledUp);
+
+    // While streaming, never let layout expansion falsely trigger userScrolledUpRef
+    if (!isStreaming) {
+      const isUp = distanceFromBottom > 120;
+      userScrolledUpRef.current = isUp;
+      setShowScrollToBottomBtn(isUp);
+    } else if (distanceFromBottom < 45 && userScrolledUpRef.current) {
+      userScrolledUpRef.current = false;
+      setShowScrollToBottomBtn(false);
+    }
   };
 
   const lastMessage = activeThread?.messages[activeThread.messages.length - 1];
@@ -646,8 +673,8 @@ ${masterTableRows}`;
 
       if (displayedText.length < targetText.length) {
         const backlog = targetText.length - displayedText.length;
-        // Adaptive step size: fast enough to never lag behind real-time stream, smooth enough to look like rapid typing
-        const step = Math.max(2, Math.min(28, Math.ceil(backlog / 5)));
+        // Fast & snappy adaptive step size: feels like ultra-responsive real-time generation
+        const step = Math.max(4, Math.min(64, Math.ceil(backlog / 3)));
         displayedText = targetText.slice(0, displayedText.length + step);
 
         onUpdateThread((t) => ({
@@ -680,7 +707,8 @@ ${masterTableRows}`;
                   ...m,
                   content:
                     targetText ||
-                    'Permintaan selesai tanpa teks tambahan.',
+                    displayedText ||
+                    'Maaf, server sedang sibuk atau koneksi terputus. Silakan klik Kirim sekali lagi.',
                   reasoning: accumulatedReasoning || undefined,
                   isStreaming: false,
                 }
@@ -688,7 +716,7 @@ ${masterTableRows}`;
           ),
         }));
         if (!userScrolledUpRef.current) {
-          requestAnimationFrame(() => scrollToBottom(true, false));
+          requestAnimationFrame(() => scrollToBottom(false, false));
         }
         rafId = null;
         if (useCanvasMode) {
@@ -755,12 +783,31 @@ ${masterTableRows}`;
           }));
         },
         onChunk: (textDelta, reasoningDelta) => {
+          const wasEmpty = targetText.length === 0;
           if (textDelta) targetText += textDelta;
           if (reasoningDelta) accumulatedReasoning += reasoningDelta;
+
+          // Immediately render the first incoming chunk so UI never gets stuck on "Menghasilkan respons..."
+          if (wasEmpty && targetText.length > 0) {
+            displayedText = targetText.slice(0, Math.min(24, targetText.length));
+            onUpdateThread((t) => ({
+              ...t,
+              messages: t.messages.map((m) =>
+                m.id === assistantSlotId
+                  ? {
+                      ...m,
+                      content: displayedText,
+                      reasoning: accumulatedReasoning || undefined,
+                      isStreaming: true,
+                    }
+                  : m
+              ),
+            }));
+          }
         },
         onComplete: () => {
           networkStreamDone = true;
-          if (controller.signal.aborted) {
+          if (controller.signal.aborted || targetText.length === 0) {
             if (rafId !== null) cancelAnimationFrame(rafId);
             setIsStreaming(false);
             onUpdateThread((t) => ({
@@ -769,12 +816,37 @@ ${masterTableRows}`;
                 m.id === assistantSlotId
                   ? {
                       ...m,
-                      content: displayedText || targetText,
+                      content:
+                        displayedText ||
+                        targetText ||
+                        'Maaf, server sedang antrean penuh. Silakan kirim ulang pesan Anda.',
                       isStreaming: false,
                     }
                   : m
               ),
             }));
+          } else {
+            // Fallback timer in case requestAnimationFrame is throttled by the browser
+            setTimeout(() => {
+              if (rafId !== null) cancelAnimationFrame(rafId);
+              setIsStreaming(false);
+              onUpdateThread((t) => ({
+                ...t,
+                messages: t.messages.map((m) =>
+                  m.id === assistantSlotId
+                    ? {
+                        ...m,
+                        content: targetText,
+                        reasoning: accumulatedReasoning || undefined,
+                        isStreaming: false,
+                      }
+                    : m
+                ),
+              }));
+              if (!userScrolledUpRef.current) {
+                scrollToBottom(false, false);
+              }
+            }, 600);
           }
         },
         onError: (err) => {
@@ -1147,6 +1219,7 @@ ${masterTableRows}`;
         {/* Messages Scroll Stage */}
         <div
           ref={messagesScrollContainerRef}
+          onWheel={handleUserWheel}
           onScroll={handleMessagesScroll}
           className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-3 relative"
         >

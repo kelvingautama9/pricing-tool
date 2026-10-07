@@ -575,6 +575,16 @@ export async function executeChatStream(
         callbacks.onComplete();
         return;
       }
+      // Automatically recover from NetworkError / connection drops via direct SDK fallback
+      try {
+        const recovered = await executeDirectSdkFallback();
+        if (recovered) {
+          callbacks.onComplete();
+          return;
+        }
+      } catch {
+        // Ignore fallback error and report original
+      }
       const typedErr = (err instanceof Error
         ? err
         : new Error(String(err))) as Error & {
