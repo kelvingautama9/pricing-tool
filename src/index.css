@@ -17,7 +17,6 @@ aside,
 header,
 main {
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
   overscroll-behavior-y: contain;
   /* DILARANG memasang transform: translateZ(0) atau perspective di sini */
 }

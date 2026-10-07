@@ -207,9 +207,9 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
     const customerRows = customers
       .map(
         (c, idx) =>
-          `${idx + 1}. ${c.name} | Tier: ${c.tier} | SW: ${
+          `${idx + 1}. ${c.name} (${c.tier}) — Diskon/Margin SW: ${
             c.swMarginPercent > 0 ? `+${c.swMarginPercent}%` : `${c.swMarginPercent}%`
-          } | DW: ${
+          }, DW: ${
             c.dwMarginPercent > 0 ? `+${c.dwMarginPercent}%` : `${c.dwMarginPercent}%`
           }`
       )
@@ -217,7 +217,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
 
     const masterTableRows = BASE_PRICE_TABLE.map(
       (r) =>
-        `${r.no}. ${r.substance} | B/F: Rp ${r['B/F'].toLocaleString('id-ID')} | C/F: Rp ${r['C/F'].toLocaleString('id-ID')} | E/F: Rp ${r['E/F'].toLocaleString('id-ID')} | CB/F (DW): Rp ${r['CB/F'].toLocaleString('id-ID')}`
+        `${r.no}. ${r.substance} — B/F: Rp ${r['B/F'].toLocaleString('id-ID')}, C/F: Rp ${r['C/F'].toLocaleString('id-ID')}, E/F: Rp ${r['E/F'].toLocaleString('id-ID')}, CB/F (DW): Rp ${r['CB/F'].toLocaleString('id-ID')}`
     ).join('\n');
 
     return `Total Customer Terdaftar/Diimpor: ${customers.length} Customer
@@ -1219,9 +1219,10 @@ ${masterTableRows}`;
         {/* Messages Scroll Stage */}
         <div
           ref={messagesScrollContainerRef}
+          data-chat-scroll-stage="true"
           onWheel={handleUserWheel}
           onScroll={handleMessagesScroll}
-          className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-3 relative"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar p-3 sm:p-4 space-y-3 relative"
         >
           {activeThread.messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-2 py-8">
@@ -1249,9 +1250,16 @@ ${masterTableRows}`;
               </div>
             </div>
           ) : (
-            activeThread.messages.map((msg) => {
+            activeThread.messages.map((msg, msgIdx) => {
               const isUser = msg.role === 'user';
               const artifact = !isUser ? extractCodeArtifact(msg.content) : null;
+              const prevUserPrompt =
+                !isUser && msgIdx > 0
+                  ? activeThread.messages
+                      .slice(0, msgIdx)
+                      .reverse()
+                      .find((m) => m.role === 'user')?.content || ''
+                  : '';
 
               return (
                 <div
@@ -1324,6 +1332,7 @@ ${masterTableRows}`;
                       content={msg.content}
                       isStreaming={msg.isStreaming}
                       isUser={isUser}
+                      userPromptText={prevUserPrompt}
                     />
 
                     {!isUser && !msg.isStreaming && (

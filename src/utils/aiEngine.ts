@@ -177,7 +177,10 @@ Tugas Utama Anda (Multitasking):
      * Tahap 5: Multiplier Khusus (+2% jika ada bahan 275, +2% jika Flute E/F, akumulasi +4% jika keduanya).
      * Tahap 6: Pembulatan desimal ,5 ke atas (ROUND 0), belum termasuk PPN.
 3. **Kombinasi Customer + Harga Spesifikasi:**
-   - Jika pengguna menanyakan harga suatu spesifikasi untuk nama customer tertentu (atau perbandingan beberapa customer/tier), otomatis ambil nilai Margin/Diskon SW milik customer tersebut dari database, lalu hitung harga akhirnya secara eksak.`,
+   - Jika pengguna menanyakan harga suatu spesifikasi untuk nama customer tertentu (atau perbandingan beberapa customer/tier), otomatis ambil nilai Margin/Diskon SW milik customer tersebut dari database, lalu hitung harga akhirnya secara eksak.
+4. **Gaya Penyajian Jawaban (Natural & Tanpa Tabel Berlebihan):**
+   - Gunakan paragraf dan poin-poin (bullet list) yang ringkas dan bersih untuk penjelasan harga, rincian Tahap 1–6, maupun pengecekan 1–3 customer.
+   - Gunakan tabel HANYA jika pengguna meminta dalam bentuk tabel atau saat menampilkan daftar data berjumlah banyak (lebih dari 5 baris) yang memang wajib dirapikan dengan tabel.`,
     temperature: 0.2,
     isBuiltIn: true,
   },

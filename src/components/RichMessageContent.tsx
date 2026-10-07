@@ -6,6 +6,7 @@ interface RichMessageContentProps {
   content: string;
   isStreaming?: boolean;
   isUser?: boolean;
+  userPromptText?: string;
 }
 
 interface ChartDataPoint {
@@ -349,6 +350,140 @@ const ResponsiveChartBlock: React.FC<{ spec: ParsedChartSpec }> = ({ spec }) => 
 };
 
 /**
+ * Forward vertical mouse wheel / touchpad scroll from inner horizontal-scroll containers
+ * directly to the main chat scroll stage so the user never gets stuck when hovering over a table or code block.
+ */
+function forwardVerticalWheelToChatStage(e: React.WheelEvent<HTMLElement>) {
+  // Always let vertical wheel scroll the main chat stage smoothly
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && e.deltaY !== 0) {
+    const scrollStage = e.currentTarget.closest(
+      '[data-chat-scroll-stage="true"]'
+    ) as HTMLElement | null;
+    if (scrollStage) {
+      scrollStage.scrollBy({ top: e.deltaY, behavior: 'auto' });
+    }
+  }
+}
+
+/**
+ * Determine whether a Markdown table should actually be rendered as a boxed table container,
+ * or converted into clean, natural bullet points when the AI over-uses tables for simple answers.
+ */
+function shouldRenderAsTableContainer(
+  rows: string[][],
+  userPromptText?: string
+): boolean {
+  const isSeparatorRow = (r: string[]) =>
+    r.every((cell) => /^[:\-\s]+$/.test(cell.trim()) || cell.trim() === '');
+  const bodyRows = rows.slice(1).filter((r) => !isSeparatorRow(r));
+  const colCount = rows[0]?.length || 0;
+
+  // 1. If the user explicitly asked for a table / matriks / rekap tabel, always show the table
+  if (
+    userPromptText &&
+    /\b(tabel|table|matriks|matrix|spreadsheet|kolom|rekap\s+tabel|bentuk\s+tabel)\b/i.test(
+      userPromptText
+    )
+  ) {
+    return true;
+  }
+
+  // 2. If it's a genuinely large dataset (e.g., >= 5 data rows and >= 3 columns, or >= 7 data rows), render as a structured table
+  if ((bodyRows.length >= 5 && colCount >= 3) || bodyRows.length >= 7) {
+    return true;
+  }
+
+  // Otherwise (1-4 rows or simple 2-column key-value breakdown), render as clean natural text/bullets without a heavy table container!
+  return false;
+}
+
+/**
+ * Clean, borderless natural list renderer for small 1-4 row tables or 2-column key-value breakdowns
+ * so the AI response looks natural and conversational without excessive boxed containers.
+ */
+const NaturalListFromTable: React.FC<{ rows: string[][] }> = ({ rows }) => {
+  const isSeparatorRow = (r: string[]) =>
+    r.every((cell) => /^[:\-\s]+$/.test(cell.trim()) || cell.trim() === '');
+  const headerRow = rows[0] || [];
+  const bodyRows = rows.slice(1).filter((r) => !isSeparatorRow(r));
+
+  if (bodyRows.length === 0) return null;
+
+  return (
+    <div className="my-1.5 space-y-1.5">
+      {bodyRows.map((row, rIdx) => {
+        const nonEmptyCells = row
+          .map((cell, cIdx) => ({
+            header: headerRow[cIdx]?.replace(/\*\*/g, '').trim() || '',
+            value: cell.trim(),
+          }))
+          .filter((item) => item.value !== '' && item.value !== '-');
+
+        if (nonEmptyCells.length === 0) return null;
+
+        // 2-column key-value style: "• Label: Nilai"
+        if (nonEmptyCells.length <= 2) {
+          const first = nonEmptyCells[0];
+          const second = nonEmptyCells[1];
+          return (
+            <div
+              key={`nat-row-${rIdx}`}
+              className="flex items-baseline gap-2 text-[12.5px] leading-relaxed"
+            >
+              <span className="text-[#C65D3B] font-bold shrink-0 select-none">•</span>
+              <div className="min-w-0 flex-1">
+                <strong className="font-semibold text-[#1C1B1A] dark:text-white">
+                  {renderInlineNodes(first.value.replace(/^\*\*|\*\*$/g, ''), false, `nat-k-${rIdx}`)}
+                </strong>
+                {second ? (
+                  <>
+                    <span className="text-neutral-400 mx-1.5">:</span>
+                    <span>
+                      {renderInlineNodes(second.value, false, `nat-v-${rIdx}`)}
+                    </span>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          );
+        }
+
+        // 3+ columns compact inline summary: "• Primary — Col2: Val2 · Col3: Val3"
+        const primary = nonEmptyCells[0];
+        const rest = nonEmptyCells.slice(1);
+        return (
+          <div
+            key={`nat-row-${rIdx}`}
+            className="flex items-baseline gap-2 text-[12.5px] leading-relaxed"
+          >
+            <span className="text-[#C65D3B] font-bold shrink-0 select-none">•</span>
+            <div className="min-w-0 flex-1">
+              <strong className="font-semibold text-[#1C1B1A] dark:text-white">
+                {renderInlineNodes(primary.value.replace(/^\*\*|\*\*$/g, ''), false, `nat-p-${rIdx}`)}
+              </strong>
+              <span className="text-neutral-400 mx-1.5">—</span>
+              {rest.map((item, cIdx) => (
+                <React.Fragment key={`nat-c-${rIdx}-${cIdx}`}>
+                  {cIdx > 0 && <span className="text-neutral-400 mx-1.5">·</span>}
+                  {item.header ? (
+                    <span className="text-neutral-500 dark:text-neutral-400">
+                      {item.header}:{' '}
+                    </span>
+                  ) : null}
+                  <span>
+                    {renderInlineNodes(item.value, false, `nat-cv-${rIdx}-${cIdx}`)}
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/**
  * Extract numeric value from a table cell like "Rp 4.125", "Rp 3.902,25", "4125"
  */
 function parseTableNumericCell(rawCell: string): number | null {
@@ -423,7 +558,10 @@ const ResponsiveMarkdownTable: React.FC<{ rows: string[][] }> = ({ rows }) => {
   };
 
   return (
-    <div className="my-3 rounded-md border border-black/10 dark:border-white/12 bg-[#FFFFFF] dark:bg-[#161311] overflow-hidden shadow-2xs">
+    <div
+      onWheel={forwardVerticalWheelToChatStage}
+      className="my-3 rounded-md border border-black/10 dark:border-white/12 bg-[#FFFFFF] dark:bg-[#161311] overflow-hidden shadow-2xs"
+    >
       {/* Table Top Bar */}
       <div className="px-3 py-1.5 bg-[#F3F1ED] dark:bg-[#22201E] border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[10.5px] font-display font-bold text-neutral-600 dark:text-neutral-300">
@@ -480,8 +618,12 @@ const ResponsiveMarkdownTable: React.FC<{ rows: string[][] }> = ({ rows }) => {
         </div>
       )}
 
-      {/* Scrollable Responsive Table (overflow-y-visible so vertical mouse wheel never gets trapped) */}
-      <div className="w-full overflow-x-auto overflow-y-visible custom-scrollbar">
+      {/* Scrollable Responsive Table (touch-pan-y + overflow-y-visible so vertical scroll never gets trapped) */}
+      <div
+        onWheel={forwardVerticalWheelToChatStage}
+        style={{ touchAction: 'pan-x pan-y' }}
+        className="w-full overflow-x-auto overflow-y-visible"
+      >
         <table className="w-full border-collapse text-left text-[11.5px]">
           <thead>
             <tr className="bg-[#F9F9F9] dark:bg-[#1d1c1a] border-b border-black/8 dark:border-white/10">
@@ -489,7 +631,7 @@ const ResponsiveMarkdownTable: React.FC<{ rows: string[][] }> = ({ rows }) => {
                 <th
                   key={`th-${colIdx}`}
                   style={{ textAlign: alignments[colIdx] || 'left' }}
-                  className="px-3 py-2 font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9] whitespace-nowrap border-r last:border-r-0 border-black/5 dark:border-white/5"
+                  className="px-2.5 py-2 font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9] border-r last:border-r-0 border-black/5 dark:border-white/5"
                 >
                   {renderInlineNodes(cell.trim(), false, `th-${colIdx}`)}
                 </th>
@@ -508,7 +650,7 @@ const ResponsiveMarkdownTable: React.FC<{ rows: string[][] }> = ({ rows }) => {
                     <td
                       key={`td-${rowIdx}-${colIdx}`}
                       style={{ textAlign: alignments[colIdx] || 'left' }}
-                      className="px-3 py-2 align-top text-[#1C1B1A] dark:text-[#F2EFE9] tabular-nums border-r last:border-r-0 border-black/5 dark:border-white/5 leading-relaxed"
+                      className="px-2.5 py-1.5 align-top text-[#1C1B1A] dark:text-[#F2EFE9] tabular-nums border-r last:border-r-0 border-black/5 dark:border-white/5 leading-relaxed"
                     >
                       {renderInlineNodes(
                         rawCell.trim(),
@@ -551,6 +693,7 @@ export const RichMessageContent: React.FC<RichMessageContentProps> = ({
   content,
   isStreaming = false,
   isUser = false,
+  userPromptText = '',
 }) => {
   const [copiedBlockIdx, setCopiedBlockIdx] = useState<number | null>(null);
 
@@ -641,7 +784,7 @@ export const RichMessageContent: React.FC<RichMessageContentProps> = ({
         continue;
       }
 
-      // 2. Markdown Table Detection (supports live streaming tables!)
+      // 2. Markdown Table Detection (only renders boxed table container when necessary or explicitly requested!)
       if (
         trimmed.startsWith('|') &&
         trimmed.indexOf('|', 1) !== -1
@@ -656,12 +799,21 @@ export const RichMessageContent: React.FC<RichMessageContentProps> = ({
           i++;
         }
         if (tableRows.length >= 1) {
-          elements.push(
-            <ResponsiveMarkdownTable
-              key={`tbl-${secIdx}-${i}`}
-              rows={tableRows}
-            />
-          );
+          if (shouldRenderAsTableContainer(tableRows, userPromptText)) {
+            elements.push(
+              <ResponsiveMarkdownTable
+                key={`tbl-${secIdx}-${i}`}
+                rows={tableRows}
+              />
+            );
+          } else {
+            elements.push(
+              <NaturalListFromTable
+                key={`nat-tbl-${secIdx}-${i}`}
+                rows={tableRows}
+              />
+            );
+          }
           continue;
         }
       }
@@ -792,7 +944,8 @@ export const RichMessageContent: React.FC<RichMessageContentProps> = ({
           return (
             <div
               key={`mb-${bIdx}`}
-              className="my-2.5 p-3 rounded-md bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/8 dark:border-white/10 overflow-x-auto custom-scrollbar"
+              onWheel={forwardVerticalWheelToChatStage}
+              className="my-2.5 p-3 rounded-md bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/8 dark:border-white/10 overflow-x-auto"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           );
@@ -811,9 +964,27 @@ export const RichMessageContent: React.FC<RichMessageContentProps> = ({
             }
           }
 
+          // If the AI wrapped ordinary text/calculation/markdown inside ```text or ```markdown or ``` tanpa bahasa, render it naturally without a heavy code container!
+          const isPlainProseBlock =
+            (!block.lang ||
+              block.lang === 'text' ||
+              block.lang === 'plaintext' ||
+              block.lang === 'markdown' ||
+              block.lang === 'md') &&
+            !/[{}();=<>\[\]]/.test(block.value);
+
+          if (isPlainProseBlock) {
+            return (
+              <React.Fragment key={`prose-cb-${bIdx}`}>
+                {renderTextSection(block.value, bIdx, isLast)}
+              </React.Fragment>
+            );
+          }
+
           return (
             <div
               key={`cb-${bIdx}`}
+              onWheel={forwardVerticalWheelToChatStage}
               className="my-2.5 rounded-md border border-black/10 dark:border-white/12 bg-[#F9F9F9] dark:bg-[#141312] overflow-hidden"
             >
               <div className="px-3 py-1.5 bg-[#F3F1ED] dark:bg-[#22201E] border-b border-black/8 dark:border-white/10 flex items-center justify-between text-[10px] font-mono text-neutral-500">
@@ -842,7 +1013,11 @@ export const RichMessageContent: React.FC<RichMessageContentProps> = ({
                   )}
                 </button>
               </div>
-              <pre className="p-3 font-mono text-[11px] leading-relaxed overflow-x-auto custom-scrollbar text-[#1C1B1A] dark:text-[#F2EFE9]">
+              <pre
+                onWheel={forwardVerticalWheelToChatStage}
+                style={{ touchAction: 'pan-x pan-y' }}
+                className="p-3 font-mono text-[11px] leading-relaxed overflow-x-auto overflow-y-visible whitespace-pre-wrap break-words text-[#1C1B1A] dark:text-[#F2EFE9]"
+              >
                 <code>{block.value}</code>
               </pre>
             </div>

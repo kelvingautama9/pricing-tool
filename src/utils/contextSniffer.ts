@@ -73,12 +73,15 @@ ${activeCalculatorSnapshot ? `- Active Calculator Spec & Price Snapshot: ${activ
   JANGAN PERNAH menjawab bahwa Anda tidak memiliki akses ke database customer, karena seluruh database customer live sudah tersedia secara lengkap di bawah ini.
 
 ${customerDatabaseSnapshot ? `[LIVE CUSTOMER DATABASE & MASTER PRICING TABLE]\n${customerDatabaseSnapshot}\n` : ''}
-[RICH OUTPUT, MATHEMATICAL LATEX, TABLE & CHART CAPABILITIES]
-- Text Styling: You may use **bold**, *italic*, <u>underline</u>, ~~strikethrough~~, inline \`code\`, headings, blockquotes, and structured lists.
+[RICH OUTPUT, MATHEMATICAL LATEX & STRICT TABLE RESTRAINT RULES]
+- Text Styling: You may use **bold**, *italic*, <u>underline</u>, ~~strikethrough~~, inline \`code\`, headings, and clean bullet/numbered lists.
 - Universal Unicode & Multilingual: Full support for all Unicode symbols (×, ÷, ±, ≈, ≤, ≥, ∑, ∫, √, Δ, π, m², Rp, €, ¥, etc.) and foreign scripts.
-- Mathematical Formulas (Basic to Expert): Use LaTeX notation with inline \`$...$\` or block \`$$...$$\` for mathematical equations, fractions (\`\\frac{a}{b}\`), summations (\`\\sum\`), integrals (\`\\int\`), roots (\`\\sqrt{}\`), matrices, and pricing formulas.
-- Responsive Tables: When presenting structured comparisons, customer lists, or step-by-step pricing breakdowns, use standard Markdown tables (\`| Kolom 1 | Kolom 2 |\`).
-- Interactive Charts / Graphs: When the user asks for a chart/grafik, output a Markdown table AND/OR a \`\`\`chart code block containing valid JSON:
+- Mathematical Formulas (Basic to Expert): Use LaTeX notation with inline \`$...$\` or block \`$$...$$\` for mathematical equations, fractions (\`\\frac{a}{b}\`), summations (\`\\sum\`), roots (\`\\sqrt{}\`), and pricing formulas.
+- STRICT TABLE & CONTAINER RESTRAINT (CRITICAL):
+  * DO NOT default to Markdown tables (\`| ... |\`) or boxed code/container blocks for ordinary answers, single-spec price calculations, single-customer lookups, explanations, or short comparisons!
+  * Present standard answers, step-by-step pricing breakdowns (Tahap 1–6), and 1–3 item comparisons using clean, natural paragraphs and concise bullet points.
+  * ONLY use a Markdown table when: (a) the user explicitly asks for a table ("buatkan tabel", "dalam bentuk tabel"), OR (b) you are displaying a large multi-row dataset (5+ rows across 3+ columns) where a table is strictly necessary for readability.
+- Interactive Charts / Graphs: ONLY when the user explicitly asks for a chart/grafik, output a \`\`\`chart code block containing valid JSON:
   \`\`\`chart
   {"type":"bar","title":"Judul Grafik","unit":"Rp","data":[{"label":"Tahap 1","value":4125},{"label":"Final","value":3902}]}
   \`\`\`
