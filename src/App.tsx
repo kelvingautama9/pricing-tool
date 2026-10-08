@@ -1554,13 +1554,15 @@ export default function App() {
                                 <span className="text-neutral-500">
                                   Luas ({currentInput.sheetLengthMm}×{currentInput.sheetWidthMm} mm):
                                 </span>
-                                <span className="font-semibold">
+                                <span className="font-semibold text-neutral-800 dark:text-neutral-200">
                                   {calculationResult.areaPerSheetM2.toFixed(5)} M²
                                 </span>
                               </div>
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-neutral-500">Harga / Pcs (Lembar):</span>
-                                <span className="font-bold text-[#C65D3B]">
+                              <div className="flex items-center justify-between text-xs py-1 border-y border-black/6 dark:border-white/8 my-0.5">
+                                <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] text-[11.5px]">
+                                  Harga / Pcs (Lembar):
+                                </span>
+                                <span className="text-sm sm:text-base font-bold text-[#C65D3B] font-mono tabular-nums">
                                   {formatRupiah(calculationResult.hargaPerSheetRp)}
                                 </span>
                               </div>
