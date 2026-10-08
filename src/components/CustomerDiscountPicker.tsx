@@ -231,7 +231,7 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
 
       {/* Floating Popover Card */}
       {isOpen && (
-        <div className="absolute right-0 mt-1.5 w-80 sm:w-96 z-50 rounded-md p-2.5 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/15 dark:border-white/15 shadow-xl text-xs text-[#1C1B1A] dark:text-[#F2EFE9]">
+        <div className="absolute right-0 mt-1.5 w-[calc(100vw-2rem)] max-w-sm sm:w-96 z-50 rounded-md p-2.5 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/15 dark:border-white/15 shadow-xl text-xs text-[#1C1B1A] dark:text-[#F2EFE9]">
           {/* Top Search & Add Bar */}
           <div className="flex items-center gap-1.5 mb-2">
             <div className="relative flex-1">

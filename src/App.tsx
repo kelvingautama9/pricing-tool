@@ -1558,11 +1558,11 @@ export default function App() {
                                   {calculationResult.areaPerSheetM2.toFixed(5)} M²
                                 </span>
                               </div>
-                              <div className="flex items-center justify-between text-xs py-1 border-y border-black/6 dark:border-white/8 my-0.5">
-                                <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] text-[11.5px]">
+                              <div className="flex items-center justify-between py-1.5 px-2.5 rounded-sm bg-[#C65D3B]/10 dark:bg-[#C65D3B]/15 border-l-2 border-[#C65D3B] my-1 transition-colors">
+                                <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs sm:text-[12.5px] tracking-tight">
                                   Harga / Pcs (Lembar):
                                 </span>
-                                <span className="text-sm sm:text-base font-bold text-[#C65D3B] font-mono tabular-nums">
+                                <span className="text-base sm:text-lg font-bold text-[#C65D3B] font-mono tabular-nums drop-shadow-2xs">
                                   {formatRupiah(calculationResult.hargaPerSheetRp)}
                                 </span>
                               </div>
