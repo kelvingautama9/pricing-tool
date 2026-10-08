@@ -224,10 +224,427 @@ export interface PricingCalculationResult {
   hargaFinalMentah: number;      // VirtualBase * (1 + totalAdditiveModifierDecimal)
   hargaBersihPerM2: number;      // ROUND(hargaFinalMentah, 0)
 
-  // Sheet Area & Pcs Conversion
+  // Sheet Area, MOQ, Weight & Pcs Conversion
   areaPerSheetM2?: number;
   hargaPerSheetRp?: number;      // ROUND(Harga_M2 * Area_M2, 2)
   totalOrderRp?: number;
+  moqResult?: MoqCalculationResult;
+  weightResult?: WeightCalculationResult;
+}
+
+export const ORDER_MIN_LENGTH_MM = 500.0;
+export const ORDER_MAX_LENGTH_MM = 2600.0;
+export const ORDER_MIN_WIDTH_MM = 300.0;
+export const ORDER_MAX_WIDTH_MM = 2480.0;
+export const CORRUGATOR_DECKLE_MAX_WIDTH_MM = 2480.0;
+export const CORRUGATOR_MIN_RUN_LENGTH_MM = 500000.0; // 500 meter
+export const MOQ_ROUNDING_MULTIPLE = 50;
+
+/**
+ * -----------------------------------------------------------------------------
+ * LOGIKA PERHITUNGAN KHUSUS BERAT KARTON SHEET, TONASE & HARGA RP/KG
+ * -----------------------------------------------------------------------------
+ * Standar Industri Corrugated Board Packaging:
+ * 1. Gramatur Tiap Lapisan (GSM):
+ *    Diekstrak dari kode bahan (misal M125 -> 125, K150 -> 150, K200 -> 200, K275 -> 275).
+ * 2. Faktor Gelombang (Take-Up Factor):
+ *    - B/F: 1.35
+ *    - C/F: 1.44
+ *    - E/F: 1.25
+ *    - CB/F (Double Wall): Flute 1 (C Flute) = 1.44 | Flute 2 (B Flute) = 1.35
+ * 3. Total Gramatur Sheet (Total GSM g/m²):
+ *    - Single Wall (SW): Top + (Mid × TakeUp) + Bot
+ *    - Double Wall (DW CB/F): Top + (Flute1 × 1.44) + Mid + (Flute2 × 1.35) + Bot
+ * 4. Berat per M² (kg/m²):
+ *    - Total GSM / 1.000
+ * 5. Berat per Pcs (Lembar):
+ *    - Gram: Luas M² × Total GSM
+ *    - Kilogram: (Luas M² × Total GSM) / 1.000
+ * 6. Tonase Total Order:
+ *    - Total Berat (kg) = Berat per Pcs (kg) × Qty
+ *    - Tonase (Ton) = Total Berat (kg) / 1.000
+ * 7. Nilai Hitungan Rp / kg:
+ *    - Harga / M² dibagi Berat per M² (kg)
+ *      (Identik secara matematis dengan: Harga per Pcs (Rp) dibagi Berat per Pcs (kg))
+ */
+export interface LayerWeightBreakdownItem {
+  position: LayerPositionLabel;
+  material: string;
+  baseGsm: number;
+  takeUpFactor: number;
+  effectiveGsm: number;
+}
+
+export interface WeightCalculationResult {
+  totalGsm: number;          // Total Gramatur Karton Sheet (g/m²)
+  beratPerM2Kg: number;      // Berat Karton per M² dalam Kilogram (kg/m²)
+  beratPerPcsGram: number;   // Berat per Lembar / Pcs (Gram)
+  beratPerPcsKg: number;     // Berat per Lembar / Pcs (Kg)
+  tonaseKg: number;          // Total Berat untuk Qty yang diisi user (Kg)
+  tonaseTon: number;         // Total Tonase untuk Qty yang diisi user (Ton)
+  rpPerKg: number;           // Nilai Rupiah per Kilogram (Rp/kg)
+  fluteTakeUpFactor: number; // Faktor gelombang flute utama
+  fluteDetailsText: string;  // Keterangan faktor gelombang
+  layers: LayerWeightBreakdownItem[]; // Rincian GSM per lapisan
+  moqTonaseKg?: number;      // Alternatif: tonase acuan jika menggunakan MOQ (Kg)
+  moqTonaseTon?: number;     // Alternatif: tonase acuan jika menggunakan MOQ (Ton)
+}
+
+export const FLUTE_TAKE_UP_FACTORS: Record<
+  FluteType,
+  {
+    flute1: number;
+    flute2?: number;
+    description: string;
+  }
+> = {
+  'B/F': { flute1: 1.35, description: 'Take-up B/F (1.35)' },
+  'C/F': { flute1: 1.44, description: 'Take-up C/F (1.44)' },
+  'E/F': { flute1: 1.25, description: 'Take-up E/F (1.25)' },
+  'CB/F': { flute1: 1.44, flute2: 1.35, description: 'Take-up C (1.44) + B (1.35)' },
+};
+
+/**
+ * Ekstraksi angka Gramatur (GSM) dari kode material.
+ * Contoh: 'M125' -> 125, 'K200' -> 200, 'K275' -> 275
+ */
+export function parseMaterialGsm(material: string): number {
+  if (!material) return 125;
+  const match = material.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 125;
+}
+
+/**
+ * Fungsi Perhitungan Berat Sheet, Tonase & Nilai Rp/Kg
+ */
+export function calculateWeight(
+  input: PricingInput,
+  hargaBersihPerM2: number,
+  hargaPerSheetRp?: number,
+  areaPerSheetM2?: number,
+  moqPcs?: number
+): WeightCalculationResult {
+  const isDoubleWall = input.flute === 'CB/F';
+  const factors = FLUTE_TAKE_UP_FACTORS[input.flute] || FLUTE_TAKE_UP_FACTORS['B/F'];
+
+  const layers: LayerWeightBreakdownItem[] = [];
+
+  // 1. Top Layer (Liner Luar)
+  const topGsm = parseMaterialGsm(input.topLayer);
+  layers.push({
+    position: 'Top',
+    material: input.topLayer,
+    baseGsm: topGsm,
+    takeUpFactor: 1.0,
+    effectiveGsm: topGsm,
+  });
+
+  if (isDoubleWall) {
+    // 2. Flute 1 (C Flute)
+    const f1Mat = input.flute1Layer || 'M125';
+    const f1Base = parseMaterialGsm(f1Mat);
+    const f1Factor = factors.flute1;
+    const f1Eff = roundHalfUp(f1Base * f1Factor, 2);
+    layers.push({
+      position: 'Flute 1',
+      material: f1Mat,
+      baseGsm: f1Base,
+      takeUpFactor: f1Factor,
+      effectiveGsm: f1Eff,
+    });
+
+    // 3. Middle (Center Liner)
+    const midGsm = parseMaterialGsm(input.midLayer);
+    layers.push({
+      position: 'Middle',
+      material: input.midLayer,
+      baseGsm: midGsm,
+      takeUpFactor: 1.0,
+      effectiveGsm: midGsm,
+    });
+
+    // 4. Flute 2 (B Flute)
+    const f2Mat = input.flute2Layer || 'M125';
+    const f2Base = parseMaterialGsm(f2Mat);
+    const f2Factor = factors.flute2 || 1.35;
+    const f2Eff = roundHalfUp(f2Base * f2Factor, 2);
+    layers.push({
+      position: 'Flute 2',
+      material: f2Mat,
+      baseGsm: f2Base,
+      takeUpFactor: f2Factor,
+      effectiveGsm: f2Eff,
+    });
+
+    // 5. Bottom Layer (Liner Dalam)
+    const botGsm = parseMaterialGsm(input.botLayer);
+    layers.push({
+      position: 'Bottom',
+      material: input.botLayer,
+      baseGsm: botGsm,
+      takeUpFactor: 1.0,
+      effectiveGsm: botGsm,
+    });
+  } else {
+    // Single Wall (Top Liner - Fluting Medium - Bottom Liner)
+    const midGsm = parseMaterialGsm(input.midLayer);
+    const midFactor = factors.flute1;
+    const midEff = roundHalfUp(midGsm * midFactor, 2);
+    layers.push({
+      position: 'Middle',
+      material: input.midLayer,
+      baseGsm: midGsm,
+      takeUpFactor: midFactor,
+      effectiveGsm: midEff,
+    });
+
+    const botGsm = parseMaterialGsm(input.botLayer);
+    layers.push({
+      position: 'Bottom',
+      material: input.botLayer,
+      baseGsm: botGsm,
+      takeUpFactor: 1.0,
+      effectiveGsm: botGsm,
+    });
+  }
+
+  // Total GSM Sheet (g/m²)
+  const totalGsm = roundHalfUp(
+    layers.reduce((acc, l) => acc + l.effectiveGsm, 0),
+    2
+  );
+
+  // Berat per M² (Kg/m²) = totalGsm / 1.000
+  const beratPerM2Kg = totalGsm / 1000.0;
+
+  // Luas Lembar (M²)
+  const area =
+    areaPerSheetM2 ||
+    (input.sheetLengthMm && input.sheetWidthMm
+      ? (input.sheetLengthMm * input.sheetWidthMm) / 1_000_000
+      : 0);
+
+  // Berat per Lembar / Pcs (Gram & Kg)
+  const beratPerPcsGram = area > 0 ? roundHalfUp(area * totalGsm, 2) : 0;
+  const beratPerPcsKg = area > 0 ? Number((beratPerPcsGram / 1000.0).toFixed(5)) : 0;
+
+  // Tonase Order berdasarkan Qty yang diisi user
+  const qty = input.quantityPcs && input.quantityPcs > 0 ? input.quantityPcs : 0;
+  const tonaseKg = roundHalfUp(beratPerPcsKg * qty, 2);
+  const tonaseTon = Number((tonaseKg / 1000.0).toFixed(4));
+
+  // Nilai Hitungan Rp / kg:
+  // - Jika lembar & pcs tersedia: Harga / Pcs (Rp) dibagi Berat / Pcs (kg)
+  // - Jika lembar belum diisi: Harga / M² (Rp) dibagi Berat / M² (kg)
+  // Keduanya bernilai sama persis.
+  let rpPerKg = 0;
+  if (beratPerPcsKg > 0 && hargaPerSheetRp && hargaPerSheetRp > 0) {
+    rpPerKg = roundHalfUp(hargaPerSheetRp / beratPerPcsKg, 0);
+  } else if (beratPerM2Kg > 0 && hargaBersihPerM2 > 0) {
+    rpPerKg = roundHalfUp(hargaBersihPerM2 / beratPerM2Kg, 0);
+  }
+
+  let moqTonaseKg: number | undefined;
+  let moqTonaseTon: number | undefined;
+  if (moqPcs && moqPcs > 0 && beratPerPcsKg > 0) {
+    moqTonaseKg = roundHalfUp(beratPerPcsKg * moqPcs, 2);
+    moqTonaseTon = Number((moqTonaseKg / 1000.0).toFixed(4));
+  }
+
+  return {
+    totalGsm,
+    beratPerM2Kg,
+    beratPerPcsGram,
+    beratPerPcsKg,
+    tonaseKg,
+    tonaseTon,
+    rpPerKg,
+    fluteTakeUpFactor: factors.flute1,
+    fluteDetailsText: factors.description,
+    layers,
+    moqTonaseKg,
+    moqTonaseTon,
+  };
+}
+
+export interface MoqDimensionWarningItem {
+  type: 'danger' | 'warning' | 'info';
+  code:
+    | 'DECKLE_WASTE_NON_STANDARD'
+    | 'WIDTH_EXCEEDED'
+    | 'WIDTH_TOO_NARROW'
+    | 'LENGTH_TOO_SHORT'
+    | 'LENGTH_TOO_LONG'
+    | 'SLITTER_KNIFE_LIMIT';
+  title: string;
+  message: string;
+}
+
+export interface MoqDimensionValidation {
+  isDeckleWasteWarning: boolean; // Lebar berada pada rentang 1251 - 1649 mm
+  isWidthExceeded: boolean;      // Lebar > 2480 mm
+  isWidthTooNarrow: boolean;     // Lebar < 300 mm
+  isLengthTooShort: boolean;     // Panjang < 500 mm
+  isLengthTooLong: boolean;      // Panjang > 2600 mm
+  hasAnyWarning: boolean;
+  warnings: MoqDimensionWarningItem[];
+}
+
+export interface MoqCalculationResult {
+  lengthMm: number;
+  widthMm: number;
+  deckleMaxWidthMm: number; // 2480 mm
+  minRunLengthMm: number;   // 500.000 mm (500 meter)
+  out: number;              // 1 sampai 7 out
+  rawMoq: number;           // ceil((500000 / panjang) * out)
+  roundedMoq: number;       // dibulatkan kelipatan 50 ke atas (ceil(raw / 50) * 50)
+  isValidForProduction: boolean;
+  validation: MoqDimensionValidation;
+}
+
+/**
+ * Langkah 1: Menentukan Nilai "Out" dari Lebar Sheet
+ * Batasan mesin corrugator standar:
+ * - Lebar < 300.0 mm -> Di bawah batas min order (Out = 7, limit fisik slitter)
+ * - Lebar > 2480.0 mm -> Out = 1 (agar user tetap bisa menghitung referensi)
+ * - 300.0 <= Lebar <= 2480.0 mm -> Out = floor(2480.0 / Lebar)
+ */
+export function hitungOut(lebar: number): number {
+  if (!Number.isFinite(lebar) || lebar <= 0) return 0;
+  if (lebar > CORRUGATOR_DECKLE_MAX_WIDTH_MM) {
+    return 1;
+  }
+  if (lebar < ORDER_MIN_WIDTH_MM) {
+    return 7;
+  }
+  return Math.floor(CORRUGATOR_DECKLE_MAX_WIDTH_MM / lebar);
+}
+
+/**
+ * Langkah 2: Menghitung MOQ (Minimum Order Quantity)
+ * - Standar Order: Panjang 500–2.600 mm | Lebar 300–2.480 mm
+ * - Non-Standar Afval Tinggi: Lebar 1.251–1.649 mm
+ * - Panjang tarikan minimal = 500.000 mm (500 meter)
+ * - Rumus Raw: ceil((500000 / Panjang) * Out)
+ * - Pembulatan Kelipatan 50 Ke Atas: ceil(Raw / 50) * 50
+ * - Jika di luar range standar: Peringatan merah (notes), user tetap dapat menghitung kalkulasi
+ */
+export function calculateMOQ(panjang: number, lebar: number): MoqCalculationResult {
+  const warnings: MoqDimensionWarningItem[] = [];
+
+  if (!Number.isFinite(panjang) || !Number.isFinite(lebar) || panjang <= 0 || lebar <= 0) {
+    return {
+      lengthMm: Number.isFinite(panjang) ? panjang : 0,
+      widthMm: Number.isFinite(lebar) ? lebar : 0,
+      deckleMaxWidthMm: CORRUGATOR_DECKLE_MAX_WIDTH_MM,
+      minRunLengthMm: CORRUGATOR_MIN_RUN_LENGTH_MM,
+      out: 0,
+      rawMoq: 0,
+      roundedMoq: 0,
+      isValidForProduction: false,
+      validation: {
+        isDeckleWasteWarning: false,
+        isWidthExceeded: false,
+        isWidthTooNarrow: false,
+        isLengthTooShort: false,
+        isLengthTooLong: false,
+        hasAnyWarning: false,
+        warnings: [],
+      },
+    };
+  }
+
+  const out = hitungOut(lebar);
+
+  // 1. Cek rentang non-standar khusus 1251 mm - 1649 mm (afval deckle berlebih)
+  const isDeckleWasteWarning = lebar >= 1251 && lebar <= 1649;
+  if (isDeckleWasteWarning) {
+    warnings.push({
+      type: 'danger',
+      code: 'DECKLE_WASTE_NON_STANDARD',
+      title: 'Lebar Non-Standar (1.251–1.649 mm)',
+      message: `Rentang ini menghasilkan afval buangan tinggi (Out = 1). Tidak masuk order standar pabrik, namun harga tetap dikalkulasi sebagai referensi.`,
+    });
+  }
+
+  // 2. Cek lebar melebihi batas maksimal (> 2480 mm)
+  const isWidthExceeded = lebar > ORDER_MAX_WIDTH_MM;
+  if (isWidthExceeded) {
+    warnings.push({
+      type: 'danger',
+      code: 'WIDTH_EXCEEDED',
+      title: 'Lebar Melebihi Standar (> 2.480 mm)',
+      message: `Lebar (${lebar.toLocaleString('id-ID')} mm) melebihi batas deckle mesin (maks. 2.480 mm).`,
+    });
+  }
+
+  // 3. Cek lebar di bawah batas minimal (< 300 mm)
+  const isWidthTooNarrow = lebar < ORDER_MIN_WIDTH_MM;
+  if (isWidthTooNarrow) {
+    warnings.push({
+      type: 'danger',
+      code: 'WIDTH_TOO_NARROW',
+      title: 'Lebar Di Bawah Standar (< 300 mm)',
+      message: `Lebar (${lebar.toLocaleString('id-ID')} mm) di bawah batas minimum lebar order (min. 300 mm).`,
+    });
+  }
+
+  // 4. Cek panjang standar minimal (< 500 mm) dan maksimal (> 2600 mm)
+  const isLengthTooShort = panjang < ORDER_MIN_LENGTH_MM;
+  if (isLengthTooShort) {
+    warnings.push({
+      type: 'danger',
+      code: 'LENGTH_TOO_SHORT',
+      title: 'Panjang Di Bawah Standar (< 500 mm)',
+      message: `Panjang (${panjang.toLocaleString('id-ID')} mm) di bawah cut-off minimum order (min. 500 mm).`,
+    });
+  }
+
+  const isLengthTooLong = panjang > ORDER_MAX_LENGTH_MM;
+  if (isLengthTooLong) {
+    warnings.push({
+      type: 'danger',
+      code: 'LENGTH_TOO_LONG',
+      title: 'Panjang Melebihi Standar (> 2.600 mm)',
+      message: `Panjang (${panjang.toLocaleString('id-ID')} mm) melebihi batas cut-off maksimum order (maks. 2.600 mm).`,
+    });
+  }
+
+  const isValidForProduction =
+    out > 0 &&
+    !isWidthExceeded &&
+    !isWidthTooNarrow &&
+    !isLengthTooShort &&
+    !isLengthTooLong &&
+    !isDeckleWasteWarning;
+
+  let rawMoq = 0;
+  let roundedMoq = 0;
+
+  if (out > 0 && panjang > 0) {
+    rawMoq = Math.ceil((CORRUGATOR_MIN_RUN_LENGTH_MM / panjang) * out);
+    roundedMoq = Math.ceil(rawMoq / MOQ_ROUNDING_MULTIPLE) * MOQ_ROUNDING_MULTIPLE;
+  }
+
+  return {
+    lengthMm: panjang,
+    widthMm: lebar,
+    deckleMaxWidthMm: CORRUGATOR_DECKLE_MAX_WIDTH_MM,
+    minRunLengthMm: CORRUGATOR_MIN_RUN_LENGTH_MM,
+    out,
+    rawMoq,
+    roundedMoq,
+    isValidForProduction,
+    validation: {
+      isDeckleWasteWarning,
+      isWidthExceeded,
+      isWidthTooNarrow,
+      isLengthTooShort,
+      isLengthTooLong,
+      hasAnyWarning: warnings.length > 0,
+      warnings,
+    },
+  };
 }
 
 /**
@@ -676,6 +1093,7 @@ export function calculateCartonPricing(input: PricingInput): PricingCalculationR
     let areaPerSheetM2: number | undefined;
     let hargaPerSheetRp: number | undefined;
     let totalOrderRp: number | undefined;
+    let moqResult: MoqCalculationResult | undefined;
 
     if (
       input.sheetLengthMm &&
@@ -685,10 +1103,20 @@ export function calculateCartonPricing(input: PricingInput): PricingCalculationR
     ) {
       areaPerSheetM2 = (input.sheetLengthMm * input.sheetWidthMm) / 1_000_000;
       hargaPerSheetRp = roundHalfUp(hargaBersihPerM2 * areaPerSheetM2, 2);
+      moqResult = calculateMOQ(input.sheetLengthMm, input.sheetWidthMm);
       if (input.quantityPcs && input.quantityPcs > 0) {
         totalOrderRp = roundHalfUp(hargaPerSheetRp * input.quantityPcs, 2);
       }
     }
+
+    // Kalkulasi Khusus Berat Lembar, Tonase & Nilai Rp/Kg
+    const weightResult = calculateWeight(
+      input,
+      hargaBersihPerM2,
+      hargaPerSheetRp,
+      areaPerSheetM2,
+      moqResult?.roundedMoq
+    );
 
     return {
       success: true,
@@ -729,6 +1157,8 @@ export function calculateCartonPricing(input: PricingInput): PricingCalculationR
       areaPerSheetM2,
       hargaPerSheetRp,
       totalOrderRp,
+      moqResult,
+      weightResult,
     };
   } catch {
     return emptyFailure(
@@ -882,7 +1312,27 @@ export function generateWhatsAppText(
       lines.push(
         `• *Dimensi Sheet:* ${result.input.sheetLengthMm} x ${result.input.sheetWidthMm} mm (${result.areaPerSheetM2.toFixed(5)} M²)`
       );
+      if (result.moqResult && result.moqResult.roundedMoq > 0) {
+        lines.push(
+          `• *MOQ Mesin (500m):* ${result.moqResult.roundedMoq.toLocaleString('id-ID')} pcs (${result.moqResult.out} Out · Kelipatan 50)`
+        );
+      }
+      if (result.moqResult?.validation.warnings && result.moqResult.validation.warnings.length > 0) {
+        result.moqResult.validation.warnings.forEach((w) => {
+          lines.push(`  ⚠️ _Catatan: ${w.title}_`);
+        });
+      }
       lines.push(`*5. HARGA / PCS: ${formatRupiah(result.hargaPerSheetRp)}*`);
+      if (result.weightResult && result.weightResult.beratPerPcsGram > 0) {
+        lines.push(
+          `• *Berat Sheet:* ${result.weightResult.beratPerPcsGram.toLocaleString('id-ID', { maximumFractionDigits: 1 })} g (${result.weightResult.beratPerPcsKg.toFixed(4)} kg) · *Rp ${result.weightResult.rpPerKg.toLocaleString('id-ID')}/kg*`
+        );
+        if (result.input.quantityPcs && result.weightResult.tonaseKg > 0) {
+          lines.push(
+            `• *Tonase Order:* ${result.weightResult.tonaseKg.toLocaleString('id-ID', { maximumFractionDigits: 1 })} kg (${result.weightResult.tonaseTon.toFixed(3)} Ton)`
+          );
+        }
+      }
       if (result.totalOrderRp && result.input.quantityPcs) {
         lines.push(
           `• *Total Order (${result.input.quantityPcs.toLocaleString('id-ID')} pcs):* ${formatRupiah(result.totalOrderRp)}`
@@ -926,6 +1376,32 @@ export function generateWhatsAppText(
         5
       )} M²): ${formatRupiah(result.hargaPerSheetRp)}*`
     );
+    if (result.moqResult && result.moqResult.roundedMoq > 0) {
+      fullLines.push(
+        `• *MOQ Mesin (500m):* ${result.moqResult.roundedMoq.toLocaleString('id-ID')} pcs (${result.moqResult.out} Out · Kelipatan 50)`
+      );
+    }
+    if (result.moqResult?.validation.warnings && result.moqResult.validation.warnings.length > 0) {
+      result.moqResult.validation.warnings.forEach((w) => {
+        fullLines.push(`  ⚠️ _Catatan: ${w.title}_`);
+      });
+    }
+    if (result.weightResult && result.weightResult.beratPerPcsGram > 0) {
+      fullLines.push(
+        `• *Spesifikasi Berat:* ${result.weightResult.totalGsm} g/m² (${result.weightResult.fluteDetailsText})`
+      );
+      fullLines.push(
+        `• *Berat / Pcs:* ${result.weightResult.beratPerPcsGram.toLocaleString('id-ID', { maximumFractionDigits: 1 })} gram (${result.weightResult.beratPerPcsKg.toFixed(4)} kg)`
+      );
+      fullLines.push(
+        `• *Rp / Kg:* Rp ${result.weightResult.rpPerKg.toLocaleString('id-ID')} / kg`
+      );
+      if (result.input.quantityPcs && result.weightResult.tonaseKg > 0) {
+        fullLines.push(
+          `• *Total Tonase (${result.input.quantityPcs.toLocaleString('id-ID')} pcs):* ${result.weightResult.tonaseKg.toLocaleString('id-ID', { maximumFractionDigits: 1 })} kg (${result.weightResult.tonaseTon.toFixed(3)} Ton)`
+        );
+      }
+    }
     if (result.totalOrderRp && result.input.quantityPcs) {
       fullLines.push(
         `• Total (${result.input.quantityPcs.toLocaleString('id-ID')} pcs): ${formatRupiah(

@@ -12,7 +12,6 @@
 /* 2. 120Hz High-Refresh-Rate Smooth Scrolling (TANPA merusak stacking context backdrop-filter di mobile) */
 html,
 body,
-.custom-scrollbar,
 aside,
 header,
 main {
@@ -27,7 +26,11 @@ input {
   touch-action: manipulation;
 }
 
-/* 3. Custom Scrollbar Tipis & Minimalis */
+/* 3. Custom Scrollbar Tipis & Minimalis — overscroll-behavior-y: auto agar scroll vertikal bebas chaining ke parent container */
+.custom-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+}
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -79,5 +82,21 @@ input {
 .katex {
   font-size: 1.04em !important;
 }
+
+@keyframes liquidPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(-4px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.015) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 
 

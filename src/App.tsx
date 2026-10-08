@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   OUTER_LAYER_OPTIONS,
   MID_LAYER_OPTIONS,
@@ -47,6 +48,7 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   Ruler,
+  Scale,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -433,6 +435,13 @@ export default function App() {
     }
   };
 
+  const handleDeleteCustomers = (ids: string[]) => {
+    setCustomers((prev) => prev.filter((c) => !ids.includes(c.id)));
+    if (selectedCustomerId && ids.includes(selectedCustomerId)) {
+      setSelectedCustomerId(null);
+    }
+  };
+
   const handleBulkImportCustomers = (importedList: CustomerDiscountItem[]) => {
     setCustomers((prev) => {
       const mapByName = new Map<string, CustomerDiscountItem>();
@@ -678,6 +687,7 @@ export default function App() {
         onAddCustomer={handleAddCustomer}
         onUpdateCustomer={handleUpdateCustomer}
         onDeleteCustomer={handleDeleteCustomer}
+        onDeleteCustomers={handleDeleteCustomers}
         onBulkImportCustomers={handleBulkImportCustomers}
         aiThreads={aiThreads}
         aiFolders={aiFolders}
@@ -890,114 +900,165 @@ export default function App() {
                   <div className="lg:col-span-7 space-y-4">
                     {/* Card 1: Layer, Flute & Margin / Customer Selectors */}
                     <div className="p-4 sm:p-5 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 space-y-4">
-                      <div className="flex items-center justify-between pb-2.5 border-b border-black/5 dark:border-white/5">
-                        <h2 className="text-xs font-display font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-black/5 dark:border-white/5">
+                        <h2 className="text-xs font-display font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 truncate">
                           Spesifikasi Layer & Flute
                         </h2>
 
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
                             onClick={handleSwapTopBottom}
                             title="Tukar Top & Bottom Layer"
-                            className="flex items-center gap-1 px-2 py-1 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[11px] font-medium transition-colors duration-150 cursor-pointer"
+                            className="flex items-center gap-1 px-2 py-1 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[11px] font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap"
                           >
-                            <ArrowRightLeft className="w-3 h-3 text-[#C65D3B]" />
+                            <ArrowRightLeft className="w-3 h-3 text-[#C65D3B] shrink-0" />
                             <span>Tukar Top/Bot</span>
                           </button>
                           <button
                             type="button"
                             onClick={handleResetNewCalculation}
                             title="Reset ke M125/M125/M125"
-                            className="p-1 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white transition-colors duration-150 cursor-pointer"
+                            className="p-1 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white transition-colors duration-150 cursor-pointer shrink-0"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
 
-                      {/* Conditional Layer Dropdowns: 5 Dropdowns for Double Wall (CB/F) vs 3 Dropdowns for Single Wall */}
-                      {flute === 'CB/F' ? (
-                        <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                      {/* Conditional Layer Dropdowns: Smooth Liquid Popup Morphing between 3-Layer (SW/E-Flute) and 5-Layer (CB/F) */}
+                      <motion.div
+                        layout
+                        transition={{
+                          layout: { type: 'spring', stiffness: 420, damping: 30, mass: 0.75 },
+                        }}
+                        className={`relative z-30 grid ${
+                          flute === 'CB/F'
+                            ? 'grid-cols-1 sm:grid-cols-5 gap-3 sm:gap-2'
+                            : 'grid-cols-1 sm:grid-cols-3 gap-3'
+                        } items-start`}
+                      >
+                        {/* 1. TOP LAYER (Smoothly morphs between 3-layer and 5-layer grid) */}
+                        <motion.div
+                          layout
+                          key="layer-slot-top"
+                          transition={{
+                            layout: { type: 'spring', stiffness: 430, damping: 29, mass: 0.7 },
+                          }}
+                          className="min-w-0"
+                        >
                           <CustomPopoverDropdown
-                            label="Top"
-                            compact
+                            label={flute === 'CB/F' ? 'Top Layer' : 'Top Layer'}
+                            compact={flute === 'CB/F'}
                             value={topLayer}
                             options={OUTER_LAYER_OPTIONS}
                             groups={['Medium', 'Kraft']}
                             onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
                           />
+                        </motion.div>
 
-                          <CustomPopoverDropdown
-                            label="Flute 1"
-                            compact
-                            value={flute1Layer}
-                            options={MID_LAYER_OPTIONS}
-                            groups={['Medium', 'Kraft']}
-                            warningNote="Inner Layer: Tanpa K110, K125, K135."
-                            onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
-                          />
+                        {/* 2. FLUTE 1 LAYER (Liquid Pop-In when switching to CB/F, Liquid Pop-Out when returning to SW/EF) */}
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          {flute === 'CB/F' && (
+                            <motion.div
+                              layout
+                              key="layer-slot-flute1"
+                              initial={{ opacity: 0, scale: 0.72, y: 10, filter: 'blur(4px)' }}
+                              animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                              exit={{ opacity: 0, scale: 0.72, y: -8, filter: 'blur(4px)' }}
+                              transition={{
+                                type: 'spring',
+                                stiffness: 460,
+                                damping: 26,
+                                mass: 0.65,
+                              }}
+                              className="min-w-0"
+                            >
+                              <CustomPopoverDropdown
+                                label="Flute 1"
+                                compact={flute === 'CB/F'}
+                                value={flute1Layer}
+                                options={MID_LAYER_OPTIONS}
+                                groups={['Medium', 'Kraft']}
+                                warningNote="Inner Layer: Tanpa K110, K125, K135."
+                                onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
+                              />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
 
+                        {/* 3. MIDDLE LAYER (Smoothly morphs between 3-layer and 5-layer grid) */}
+                        <motion.div
+                          layout
+                          key="layer-slot-mid"
+                          transition={{
+                            layout: { type: 'spring', stiffness: 430, damping: 29, mass: 0.7 },
+                          }}
+                          className="min-w-0"
+                        >
                           <CustomPopoverDropdown
-                            label="Mid"
-                            compact
+                            label={flute === 'CB/F' ? 'Middle Layer' : 'Middle Layer'}
+                            compact={flute === 'CB/F'}
                             value={midLayer}
                             options={MID_LAYER_OPTIONS}
                             groups={['Medium', 'Kraft']}
+                            align={flute === 'CB/F' ? 'center' : 'left'}
                             warningNote="Inner Layer: Tanpa K110, K125, K135."
                             onChange={(val) => setMidLayer(val as MidLayerMaterial)}
                           />
+                        </motion.div>
 
-                          <CustomPopoverDropdown
-                            label="Flute 2"
-                            compact
-                            value={flute2Layer}
-                            options={MID_LAYER_OPTIONS}
-                            groups={['Medium', 'Kraft']}
-                            align="right"
-                            warningNote="Inner Layer: Tanpa K110, K125, K135."
-                            onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
-                          />
+                        {/* 4. FLUTE 2 LAYER (Liquid Pop-In when switching to CB/F, Liquid Pop-Out when returning to SW/EF) */}
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          {flute === 'CB/F' && (
+                            <motion.div
+                              layout
+                              key="layer-slot-flute2"
+                              initial={{ opacity: 0, scale: 0.72, y: 10, filter: 'blur(4px)' }}
+                              animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+                              exit={{ opacity: 0, scale: 0.72, y: -8, filter: 'blur(4px)' }}
+                              transition={{
+                                type: 'spring',
+                                stiffness: 460,
+                                damping: 26,
+                                mass: 0.65,
+                              }}
+                              className="min-w-0"
+                            >
+                              <CustomPopoverDropdown
+                                label="Flute 2"
+                                compact={flute === 'CB/F'}
+                                value={flute2Layer}
+                                options={MID_LAYER_OPTIONS}
+                                groups={['Medium', 'Kraft']}
+                                align="right"
+                                warningNote="Inner Layer: Tanpa K110, K125, K135."
+                                onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
+                              />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
 
+                        {/* 5. BOTTOM LAYER (Smoothly morphs between 3-layer and 5-layer grid) */}
+                        <motion.div
+                          layout
+                          key="layer-slot-bot"
+                          transition={{
+                            layout: { type: 'spring', stiffness: 430, damping: 29, mass: 0.7 },
+                          }}
+                          className="min-w-0"
+                        >
                           <CustomPopoverDropdown
-                            label="Bottom"
-                            compact
+                            label={flute === 'CB/F' ? 'Bottom Layer' : 'Bottom Layer'}
+                            compact={flute === 'CB/F'}
                             value={botLayer}
                             options={OUTER_LAYER_OPTIONS}
                             groups={['Medium', 'Kraft']}
                             align="right"
                             onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
                           />
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <CustomPopoverDropdown
-                            label="Top Layer"
-                            value={topLayer}
-                            options={OUTER_LAYER_OPTIONS}
-                            groups={['Medium', 'Kraft']}
-                            onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
-                          />
-
-                          <CustomPopoverDropdown
-                            label="Middle Layer"
-                            value={midLayer}
-                            options={MID_LAYER_OPTIONS}
-                            groups={['Medium', 'Kraft']}
-                            warningNote="Tanpa K110, K125, K135 sesuai SOP."
-                            onChange={(val) => setMidLayer(val as MidLayerMaterial)}
-                          />
-
-                          <CustomPopoverDropdown
-                            label="Bottom Layer"
-                            value={botLayer}
-                            options={OUTER_LAYER_OPTIONS}
-                            groups={['Medium', 'Kraft']}
-                            align="right"
-                            onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
-                          />
-                        </div>
-                      )}
+                        </motion.div>
+                      </motion.div>
 
                       {/* Flute 1-Row Selector (B/F, C/F, E/F, CB/F) */}
                       <div className="pt-2 border-t border-black/5 dark:border-white/5">
@@ -1062,7 +1123,7 @@ export default function App() {
                               : 'Harga Normal (0%)'}
                             {activeCustomer && customerMarginResolution
                               ? ` · ${
-                                  customerMarginResolution.usedCustomer275OrEfRate
+                                  customerMarginResolution.customerSpecial275EfOverrideActive
                                     ? 'Acuan 275/EF Customer'
                                     : 'Acuan SW Customer'
                                 }`
@@ -1177,67 +1238,229 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Card 2: Optional Sheet Dimension & Quantity Calculator */}
+                    {/* Card 2: Sheet Dimension, MOQ & Quantity Calculator */}
                     <div className="rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 overflow-hidden">
                       <button
                         type="button"
                         onClick={() => setShowSheetConverter(!showSheetConverter)}
                         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-black/3 dark:hover:bg-white/3 transition-colors cursor-pointer"
                       >
-                        <div className="flex items-center gap-2">
-                          <Ruler className="w-3.5 h-3.5 text-[#C65D3B]" />
-                          <span className="text-xs font-display font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
-                            Konversi Ukuran Lembar Sheet (Opsional)
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Ruler className="w-3.5 h-3.5 text-[#C65D3B] shrink-0" />
+                          <span className="text-xs font-display font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] truncate">
+                            Dimensi Sheet & MOQ
                           </span>
                         </div>
-                        {showSheetConverter ? (
-                          <ChevronUp className="w-4 h-4 text-neutral-400" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-neutral-400" />
-                        )}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {calculationResult.moqResult && calculationResult.moqResult.roundedMoq > 0 && (
+                            <span
+                              className={`font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded-xs ${
+                                calculationResult.moqResult.validation.hasAnyWarning
+                                  ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
+                                  : 'text-[#C65D3B] bg-[#F3F1ED] dark:bg-[#22201E]'
+                              }`}
+                            >
+                              MOQ: {calculationResult.moqResult.roundedMoq.toLocaleString('id-ID')} pcs
+                            </span>
+                          )}
+                          {showSheetConverter ? (
+                            <ChevronUp className="w-4 h-4 text-neutral-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-neutral-400" />
+                          )}
+                        </div>
                       </button>
 
                       {showSheetConverter && (
-                        <div className="p-4 pt-2 border-t border-black/5 dark:border-white/5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-[10.5px] font-medium mb-1 text-neutral-500">
-                              Panjang (mm)
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={sheetLengthStr}
-                              onChange={(e) => setSheetLengthStr(e.target.value)}
-                              placeholder="1200"
-                              className="w-full px-2.5 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 tabular-nums focus:outline-1 focus:outline-[#C65D3B]"
-                            />
+                        <div className="p-4 pt-2 border-t border-black/5 dark:border-white/5 space-y-2.5">
+                          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                            <div>
+                              <label className="block text-[10px] sm:text-[10.5px] font-medium mb-1 text-neutral-500 truncate">
+                                Panjang (mm)
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={sheetLengthStr}
+                                onChange={(e) => setSheetLengthStr(e.target.value)}
+                                placeholder="1200"
+                                className="w-full px-2 sm:px-2.5 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 tabular-nums focus:outline-1 focus:outline-[#C65D3B]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] sm:text-[10.5px] font-medium mb-1 text-neutral-500 truncate">
+                                Lebar (mm)
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={sheetWidthStr}
+                                onChange={(e) => setSheetWidthStr(e.target.value)}
+                                placeholder="800"
+                                className="w-full px-2 sm:px-2.5 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 tabular-nums focus:outline-1 focus:outline-[#C65D3B]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] sm:text-[10.5px] font-medium mb-1 text-neutral-500 truncate">
+                                Qty (pcs)
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={quantityStr}
+                                onChange={(e) => setQuantityStr(e.target.value)}
+                                placeholder="1000"
+                                className="w-full px-2 sm:px-2.5 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 tabular-nums focus:outline-1 focus:outline-[#C65D3B]"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-[10.5px] font-medium mb-1 text-neutral-500">
-                              Lebar (mm)
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={sheetWidthStr}
-                              onChange={(e) => setSheetWidthStr(e.target.value)}
-                              placeholder="800"
-                              className="w-full px-2.5 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 tabular-nums focus:outline-1 focus:outline-[#C65D3B]"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10.5px] font-medium mb-1 text-neutral-500">
-                              Qty (Lembar)
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={quantityStr}
-                              onChange={(e) => setQuantityStr(e.target.value)}
-                              placeholder="1000"
-                              className="w-full px-2.5 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 font-mono text-xs placeholder:text-neutral-300 dark:placeholder:text-neutral-600 tabular-nums focus:outline-1 focus:outline-[#C65D3B]"
-                            />
-                          </div>
+
+                          {/* Live MOQ Corrugator Calculation Result Strip */}
+                          {calculationResult.moqResult &&
+                            calculationResult.moqResult.lengthMm > 0 &&
+                            calculationResult.moqResult.widthMm > 0 && (
+                              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 dark:text-neutral-500 shrink-0">
+                                    MOQ
+                                  </span>
+                                  <div className="flex items-baseline gap-1.5 min-w-0">
+                                    <span className="font-mono text-xs sm:text-sm font-bold text-[#C65D3B] tabular-nums">
+                                      {calculationResult.moqResult.roundedMoq > 0
+                                        ? `${calculationResult.moqResult.roundedMoq.toLocaleString('id-ID')} pcs`
+                                        : '—'}
+                                    </span>
+                                    <span className="font-mono text-[10px] text-neutral-400 truncate">
+                                      ({calculationResult.moqResult.out > 0 ? `${calculationResult.moqResult.out} Out` : '0 Out'} · 500m)
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {calculationResult.moqResult.roundedMoq > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      triggerHaptic('light');
+                                      setQuantityStr(
+                                        String(calculationResult.moqResult!.roundedMoq)
+                                      );
+                                    }}
+                                    className="shrink-0 px-2 py-1 rounded bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 hover:border-[#C65D3B] text-[10px] font-medium text-neutral-700 dark:text-neutral-300 hover:text-[#C65D3B] transition-colors cursor-pointer shadow-2xs"
+                                    title="Salin nilai MOQ ke Qty order"
+                                  >
+                                    Pakai MOQ
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                          {/* Live Berat & Tonase Calculation Result Strip */}
+                          {calculationResult.weightResult &&
+                            calculationResult.weightResult.beratPerPcsGram > 0 && (
+                              <div className="grid grid-cols-3 gap-2 px-3 py-2 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 text-[11px] font-mono tabular-nums">
+                                <div>
+                                  <div className="flex items-center gap-1 text-[9.5px] uppercase font-bold tracking-wider text-neutral-400 dark:text-neutral-500">
+                                    <Scale className="w-2.5 h-2.5 text-[#C65D3B]" />
+                                    <span>Berat / Pcs</span>
+                                  </div>
+                                  <div className="mt-0.5">
+                                    <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs">
+                                      {calculationResult.weightResult.beratPerPcsGram.toLocaleString(
+                                        'id-ID',
+                                        {
+                                          minimumFractionDigits: 1,
+                                          maximumFractionDigits: 1,
+                                        }
+                                      )}{' '}
+                                      g
+                                    </span>
+                                    <span className="block text-[9.5px] text-neutral-400 font-sans">
+                                      {calculationResult.weightResult.beratPerPcsKg.toFixed(4)} kg
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="text-[9.5px] uppercase font-bold tracking-wider text-neutral-400 dark:text-neutral-500 truncate">
+                                    Tonase {currentInput.quantityPcs ? 'Order' : 'MOQ'}
+                                  </div>
+                                  <div className="mt-0.5">
+                                    <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs">
+                                      {currentInput.quantityPcs &&
+                                      calculationResult.weightResult.tonaseKg > 0
+                                        ? `${calculationResult.weightResult.tonaseKg.toLocaleString(
+                                            'id-ID',
+                                            { maximumFractionDigits: 1 }
+                                          )} kg`
+                                        : calculationResult.weightResult.moqTonaseKg
+                                        ? `${calculationResult.weightResult.moqTonaseKg.toLocaleString(
+                                            'id-ID',
+                                            { maximumFractionDigits: 1 }
+                                          )} kg`
+                                        : '—'}
+                                    </span>
+                                    <span className="block text-[9.5px] text-neutral-400 font-sans truncate">
+                                      {currentInput.quantityPcs &&
+                                      calculationResult.weightResult.tonaseTon > 0
+                                        ? `${calculationResult.weightResult.tonaseTon.toFixed(3)} Ton`
+                                        : calculationResult.weightResult.moqTonaseTon
+                                        ? `${calculationResult.weightResult.moqTonaseTon.toFixed(3)} Ton (MOQ)`
+                                        : 'Isi Qty pcs'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="text-[9.5px] uppercase font-bold tracking-wider text-neutral-400 dark:text-neutral-500">
+                                    Rp / Kg
+                                  </div>
+                                  <div className="mt-0.5">
+                                    <span className="font-bold text-[#C65D3B] text-xs">
+                                      Rp{' '}
+                                      {calculationResult.weightResult.rpPerKg.toLocaleString('id-ID')}
+                                    </span>
+                                    <span className="block text-[9.5px] text-neutral-400 font-sans">
+                                      {calculationResult.weightResult.totalGsm} gsm
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Peringatan / Notes Warna Merah Jika Spesifikasi Tidak Memenuhi Standar */}
+                          {calculationResult.moqResult?.validation.warnings &&
+                            calculationResult.moqResult.validation.warnings.length > 0 && (
+                              <div className="space-y-1.5 pt-0.5">
+                                {calculationResult.moqResult.validation.warnings.map(
+                                  (w, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`flex items-start gap-2 px-2.5 py-1.5 rounded-md text-[11px] leading-snug border ${
+                                        w.type === 'danger'
+                                          ? 'bg-rose-500/10 border-rose-500/25 text-rose-800 dark:text-rose-300'
+                                          : w.type === 'warning'
+                                          ? 'bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-300'
+                                          : 'bg-blue-500/10 border-blue-500/25 text-blue-800 dark:text-blue-300'
+                                      }`}
+                                    >
+                                      <AlertTriangle
+                                        className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
+                                          w.type === 'danger'
+                                            ? 'text-rose-600 dark:text-rose-400'
+                                            : w.type === 'warning'
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-blue-600 dark:text-blue-400'
+                                        }`}
+                                      />
+                                      <div className="min-w-0">
+                                        <span className="font-semibold">{w.title} — </span>
+                                        <span className="opacity-90">{w.message}</span>
+                                      </div>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            )}
                         </div>
                       )}
                     </div>
@@ -1341,6 +1564,83 @@ export default function App() {
                                   {formatRupiah(calculationResult.hargaPerSheetRp)}
                                 </span>
                               </div>
+                              {calculationResult.weightResult &&
+                                calculationResult.weightResult.beratPerPcsGram > 0 && (
+                                  <>
+                                    <div className="flex items-center justify-between text-[11px]">
+                                      <span className="text-neutral-500 font-sans">
+                                        Berat / Pcs (Lembar):
+                                      </span>
+                                      <span className="font-semibold font-mono text-[#1C1B1A] dark:text-[#F2EFE9]">
+                                        {calculationResult.weightResult.beratPerPcsGram.toLocaleString(
+                                          'id-ID',
+                                          {
+                                            minimumFractionDigits: 1,
+                                            maximumFractionDigits: 1,
+                                          }
+                                        )}{' '}
+                                        g
+                                        <span className="text-neutral-400 font-normal ml-1 text-[10px]">
+                                          ({calculationResult.weightResult.beratPerPcsKg.toFixed(4)} kg)
+                                        </span>
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[11px]">
+                                      <span className="text-neutral-500 font-sans">
+                                        Rp / Kg:
+                                      </span>
+                                      <span className="font-bold font-mono text-[#C65D3B]">
+                                        Rp{' '}
+                                        {calculationResult.weightResult.rpPerKg.toLocaleString('id-ID')}{' '}
+                                        / kg
+                                      </span>
+                                    </div>
+                                    {currentInput.quantityPcs &&
+                                      calculationResult.weightResult.tonaseKg > 0 && (
+                                        <div className="flex items-center justify-between text-[11px]">
+                                          <span className="text-neutral-500 font-sans">
+                                            Tonase ({currentInput.quantityPcs.toLocaleString('id-ID')}{' '}
+                                            pcs):
+                                          </span>
+                                          <span className="font-semibold font-mono text-[#1C1B1A] dark:text-[#F2EFE9]">
+                                            {calculationResult.weightResult.tonaseKg.toLocaleString(
+                                              'id-ID',
+                                              { maximumFractionDigits: 1 }
+                                            )}{' '}
+                                            kg
+                                            <span className="text-neutral-400 font-normal ml-1 text-[10px]">
+                                              ({calculationResult.weightResult.tonaseTon.toFixed(3)} Ton)
+                                            </span>
+                                          </span>
+                                        </div>
+                                      )}
+                                  </>
+                                )}
+                              {calculationResult.moqResult &&
+                                calculationResult.moqResult.roundedMoq > 0 && (
+                                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-black/6 dark:border-white/8">
+                                    <span className="text-neutral-500 font-sans">
+                                      MOQ (500m · {calculationResult.moqResult.out} Out):
+                                    </span>
+                                    <span className="font-bold font-mono text-[#1C1B1A] dark:text-[#F2EFE9]">
+                                      {calculationResult.moqResult.roundedMoq.toLocaleString('id-ID')} pcs
+                                    </span>
+                                  </div>
+                                )}
+                              {calculationResult.moqResult?.validation.warnings &&
+                                calculationResult.moqResult.validation.warnings.length > 0 && (
+                                  <div className="pt-0.5 space-y-0.5">
+                                    {calculationResult.moqResult.validation.warnings.map((w, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="text-[10px] font-sans font-medium text-rose-600 dark:text-rose-400 flex items-center gap-1"
+                                      >
+                                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                                        <span>{w.title}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               {calculationResult.totalOrderRp && currentInput.quantityPcs && (
                                 <div className="flex items-center justify-between pt-1 border-t border-black/8 dark:border-white/10">
                                   <span className="font-semibold text-[11px]">

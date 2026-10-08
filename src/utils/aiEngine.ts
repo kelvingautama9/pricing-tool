@@ -182,7 +182,24 @@ Tugas Utama Anda (Multitasking):
        - \`Harga / M² = ROUND(Virtual Base * (1 + Total Modifier), 0)\`
        - \`Luas Area (M²) = (Panjang_mm * Lebar_mm) / 1.000.000\`
        - \`Harga / Pcs = ROUND(Harga / M² * Luas Area, 2)\`
-3. **Gaya Penyajian Jawaban (Natural & Tanpa Tabel Berlebihan):**
+3. **Logika Minimum Order Quantity (MOQ) Corrugator & Batas Dimensi:**
+   - Batas Standar Order: Panjang 500 mm – 2.600 mm | Lebar 300 mm – 2.480 mm.
+   - Panjang Tarikan Produksi Minimal = 500.000 mm (500 meter).
+   - Nilai Out:
+     * Jika Lebar < 300 mm -> Out = 7 (di bawah batas min order, limit pisau).
+     * Jika Lebar > 2480 mm -> Out = 1 (melebihi kapasitas mesin, tetap dihitung untuk estimasi referensi).
+     * Jika 300 mm <= Lebar <= 2480 mm -> Out = floor(2480 / Lebar).
+   - Rumus Raw MOQ = ceil((500000 / Panjang) * Out).
+   - Pembulatan MOQ = Kelipatan 50 ke atas: ceil(Raw / 50) * 50.
+   - Peringatan Merah: Jika panjang/lebar di luar batas standar (P < 500, P > 2600, L < 300, L > 2480) atau lebar non-standar (1.251 – 1.649 mm afval tinggi), sistem menampilkan peringatan/notes namun kalkulasi harga tetap berjalan untuk estimasi.
+4. **Logika Perhitungan Berat Karton Sheet, Tonase & Nilai Rp / Kg:**
+   - Ekstraksi GSM: Angka kode bahan adalah gramasi (g/m²). Contoh: M125 = 125, K150 = 150, K200 = 200, K275 = 275 gsm.
+   - Faktor Take-Up: B/F = 1.35 | C/F = 1.44 | E/F = 1.25. Untuk Double Wall (CB/F): Flute 1 (C) = 1.44, Flute 2 (B) = 1.35.
+   - Total GSM: Single Wall = Top + (Mid × FluteFactor) + Bot. Double Wall CB/F = Top + (Flute1 × 1.44) + Mid + (Flute2 × 1.35) + Bot.
+   - Berat / Pcs: Gram = Luas M² × Total GSM | Kg = Gram / 1.000.
+   - Tonase (kg & Ton): Berat / Pcs (kg) × Qty | Ton = kg / 1.000.
+   - Nilai Rp / kg = Harga / Pcs (Rp) / Berat / Pcs (kg) (identik dengan Harga / M² / Berat / M²).
+5. **Gaya Penyajian Jawaban (Natural & Tanpa Tabel Berlebihan):**
    - Gunakan paragraf dan poin-poin (bullet list) yang ringkas dan bersih. Gunakan tabel HANYA jika diminta user atau untuk perbandingan 5+ baris.`,
     temperature: 0.2,
     isBuiltIn: true,

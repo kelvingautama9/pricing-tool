@@ -4,6 +4,7 @@ import {
   Search,
   X,
   CheckSquare,
+  Square,
   ChevronDown,
   ChevronRight,
   Pin,
@@ -22,6 +23,7 @@ import {
   FileUp,
   HelpCircle,
   MessageSquare,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   PricingInput,
@@ -81,6 +83,7 @@ interface SidebarHistoryProps {
   onAddCustomer: (item: Omit<CustomerDiscountItem, 'id'>) => void;
   onUpdateCustomer: (item: CustomerDiscountItem) => void;
   onDeleteCustomer: (id: string) => void;
+  onDeleteCustomers?: (ids: string[]) => void;
   onBulkImportCustomers: (items: CustomerDiscountItem[]) => void;
   // AI Chat Threads & Folders Props
   aiThreads: ChatThread[];
@@ -121,6 +124,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   onAddCustomer,
   onUpdateCustomer,
   onDeleteCustomer,
+  onDeleteCustomers,
   onBulkImportCustomers,
   aiThreads,
   aiFolders,
@@ -158,6 +162,9 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
   const [isCustDwManuallyEdited, setIsCustDwManuallyEdited] = useState(false);
   const [custImportMsg, setCustImportMsg] = useState<string | null>(null);
   const [showSidebarGuide, setShowSidebarGuide] = useState(false);
+  const [custBatchMode, setCustBatchMode] = useState(false);
+  const [selectedCustIds, setSelectedCustIds] = useState<string[]>([]);
+  const [showConfirmDeleteAllCust, setShowConfirmDeleteAllCust] = useState(false);
 
   // AI Chat management state inside Sidebar
   const [aiCollapsedFolders, setAiCollapsedFolders] = useState<Record<string, boolean>>({});
@@ -217,6 +224,32 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
+  };
+
+  const toggleCustBatchSelect = (id: string) => {
+    setSelectedCustIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllCustomers = () => {
+    if (selectedCustIds.length === filteredCustomers.length) {
+      setSelectedCustIds([]);
+    } else {
+      setSelectedCustIds(filteredCustomers.map((c) => c.id));
+    }
+  };
+
+  const handleDeleteSelectedCustomers = () => {
+    if (selectedCustIds.length === 0) return;
+    if (onDeleteCustomers) {
+      onDeleteCustomers(selectedCustIds);
+    } else {
+      selectedCustIds.forEach((id) => onDeleteCustomer(id));
+    }
+    setSelectedCustIds([]);
+    setCustBatchMode(false);
+    setShowConfirmDeleteAllCust(false);
   };
 
   const startEditing = (item: CalculationHistoryItem, e: React.MouseEvent) => {
@@ -763,6 +796,26 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                 </button>
               )}
 
+              {sidebarMode === 'customers' && customers.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustBatchMode(!custBatchMode);
+                    setSelectedCustIds([]);
+                    setShowConfirmDeleteAllCust(false);
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1.5 rounded-md border text-[10.5px] font-medium transition-colors duration-150 cursor-pointer shrink-0 ${
+                    custBatchMode
+                      ? 'bg-[#C65D3B]/15 border-[#C65D3B] text-[#C65D3B] font-semibold'
+                      : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/6 dark:border-white/8 text-neutral-600 dark:text-neutral-300 hover:text-[#1C1B1A]'
+                  }`}
+                  title={custBatchMode ? 'Tutup mode pilih' : 'Pilih customer untuk dihapus'}
+                >
+                  <CheckSquare className="w-3 h-3" />
+                  <span>Pilih</span>
+                </button>
+              )}
+
               {sidebarMode === 'ai' && (
                 <button
                   type="button"
@@ -985,22 +1038,69 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                   </div>
                 )}
 
-                {/* Tier Filter Tabs */}
-                <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 gap-0.5 overflow-x-auto no-scrollbar">
-                  {(['ALL', 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setCustTierFilter(t)}
-                      className={`flex-1 py-1 px-1 rounded-xs text-[9px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                        custTierFilter === t
-                          ? 'bg-[#C65D3B] text-white font-semibold'
-                          : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
-                      }`}
-                    >
-                      {t === 'ALL' ? 'Semua' : t}
-                    </button>
-                  ))}
+                {/* Tier Filter Tabs & Batch Select Bar */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/5 dark:border-white/5 gap-0.5 overflow-x-auto no-scrollbar">
+                    {(['ALL', 'Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => {
+                          setCustTierFilter(t);
+                          if (custBatchMode) setSelectedCustIds([]);
+                        }}
+                        className={`flex-1 py-1 px-1 rounded-xs text-[9px] font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                          custTierFilter === t
+                            ? 'bg-[#C65D3B] text-white font-semibold'
+                            : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
+                        }`}
+                      >
+                        {t === 'ALL' ? 'Semua' : t}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Customer Select All Toolbar when in Batch Mode */}
+                  {custBatchMode && (
+                    <div className="flex items-center justify-between px-2 py-1.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/8 dark:border-white/10 text-[10.5px]">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllCustomers}
+                        className="flex items-center gap-1.5 font-medium text-[#1C1B1A] dark:text-[#F2EFE9] hover:text-[#C65D3B] transition-colors cursor-pointer"
+                      >
+                        {selectedCustIds.length > 0 &&
+                        selectedCustIds.length === filteredCustomers.length ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-[#C65D3B]" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5 text-neutral-400" />
+                        )}
+                        <span>
+                          {selectedCustIds.length === filteredCustomers.length && filteredCustomers.length > 0
+                            ? 'Batal Pilih Semua'
+                            : `Pilih Semua (${filteredCustomers.length})`}
+                        </span>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        {selectedCustIds.length > 0 && (
+                          <span className="font-mono text-[10px] text-[#C65D3B] font-semibold">
+                            {selectedCustIds.length} dipilih
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustBatchMode(false);
+                            setSelectedCustIds([]);
+                            setShowConfirmDeleteAllCust(false);
+                          }}
+                          className="text-[10px] text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 cursor-pointer"
+                        >
+                          Selesai
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Inline Add/Edit Form */}
@@ -1115,6 +1215,7 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                 <div className="space-y-0.5">
                   {filteredCustomers.map((cust) => {
                     const isSelected = cust.id === selectedCustomerId;
+                    const isChecked = selectedCustIds.includes(cust.id);
                     const swSign = cust.swMarginPercent > 0 ? '+' : '';
                     const dwSign = cust.dwMarginPercent > 0 ? '+' : '';
 
@@ -1122,15 +1223,38 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                       <div
                         key={cust.id}
                         onClick={() => {
-                          onSelectCustomer(cust);
-                          onCloseMobile();
+                          if (custBatchMode) {
+                            toggleCustBatchSelect(cust.id);
+                          } else {
+                            onSelectCustomer(cust);
+                            onCloseMobile();
+                          }
                         }}
                         className={`group flex items-center justify-between px-2 py-1.5 rounded-xs text-[10.5px] transition-colors cursor-pointer ${
-                          isSelected
+                          custBatchMode && isChecked
+                            ? 'bg-[#C65D3B]/15 border border-[#C65D3B]/40'
+                            : isSelected
                             ? 'bg-[#C65D3B]/12 border border-[#C65D3B]/35 font-semibold'
                             : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
                         }`}
                       >
+                        {/* Checkbox when in batch mode */}
+                        {custBatchMode && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCustBatchSelect(cust.id);
+                            }}
+                            className="mr-2 shrink-0 cursor-pointer text-neutral-400 hover:text-[#C65D3B]"
+                          >
+                            {isChecked ? (
+                              <CheckSquare className="w-3.5 h-3.5 text-[#C65D3B]" />
+                            ) : (
+                              <Square className="w-3.5 h-3.5 text-neutral-400" />
+                            )}
+                          </div>
+                        )}
+
                         <div className="min-w-0 flex-1 pr-2">
                           <div className="flex items-center gap-1">
                             <span className="truncate text-[10.5px] font-medium">
@@ -1161,25 +1285,27 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={(e) => openCustEdit(cust, e)}
-                            className="p-1 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white rounded-xs cursor-pointer"
-                          >
-                            <Edit3 className="w-2.5 h-2.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteCustomer(cust.id);
-                            }}
-                            className="p-1 text-neutral-400 hover:text-rose-600 rounded-xs cursor-pointer"
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                          </button>
-                        </div>
+                        {!custBatchMode && (
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => openCustEdit(cust, e)}
+                              className="p-1 text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white rounded-xs cursor-pointer"
+                            >
+                              <Edit3 className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteCustomer(cust.id);
+                              }}
+                              className="p-1 text-neutral-400 hover:text-rose-600 rounded-xs cursor-pointer"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1400,6 +1526,88 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
               >
                 Hapus
               </button>
+            </div>
+          )}
+
+          {/* 4C. Batch Action Dock for Customers */}
+          {sidebarMode === 'customers' && custBatchMode && (
+            <div className="mx-3 mb-2 p-2.5 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 space-y-2">
+              <div className="flex items-center justify-between text-[10.5px]">
+                <div className="flex items-center gap-1.5 font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                  <Users className="w-3.5 h-3.5 text-[#C65D3B]" />
+                  <span>
+                    {selectedCustIds.length > 0
+                      ? `${selectedCustIds.length} dari ${filteredCustomers.length} customer dipilih`
+                      : 'Belum ada customer dipilih'}
+                  </span>
+                </div>
+                {selectedCustIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustIds([]);
+                      setShowConfirmDeleteAllCust(false);
+                    }}
+                    className="text-[10px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer"
+                  >
+                    Batal Pilih
+                  </button>
+                )}
+              </div>
+
+              {/* Confirm Dialog or Action Buttons */}
+              {showConfirmDeleteAllCust ? (
+                <div className="p-2 rounded-md bg-rose-500/10 border border-rose-500/30 space-y-1.5 text-rose-700 dark:text-rose-400">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold leading-tight">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      Hapus {selectedCustIds.length} customer terpilih permanen?
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-end gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmDeleteAllCust(false)}
+                      className="px-2 py-1 text-[10px] font-medium rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-black/5 cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedCustomers}
+                      className="px-2.5 py-1 text-[10px] font-semibold rounded-xs bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+                    >
+                      Ya, Hapus Semua
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllCustomers}
+                    className="flex-1 py-1 px-2 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-[10px] font-medium text-neutral-700 dark:text-neutral-200 hover:text-[#C65D3B] transition-colors cursor-pointer text-center truncate"
+                  >
+                    {selectedCustIds.length === filteredCustomers.length && filteredCustomers.length > 0
+                      ? 'Batal Pilih Semua'
+                      : `Pilih Semua (${filteredCustomers.length})`}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={selectedCustIds.length === 0}
+                    onClick={() => setShowConfirmDeleteAllCust(true)}
+                    className={`flex items-center justify-center gap-1 py-1 px-3 rounded-xs text-[10px] font-semibold transition-colors cursor-pointer shrink-0 ${
+                      selectedCustIds.length === 0
+                        ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
+                        : 'bg-rose-600 hover:bg-rose-700 text-white'
+                    }`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Hapus ({selectedCustIds.length})</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

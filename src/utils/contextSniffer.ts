@@ -392,9 +392,13 @@ export function buildSmartRagAndPreCalcContext(
         });
 
         if (cbf.success) {
+          const moqPart =
+            cbf.moqResult && cbf.moqResult.roundedMoq > 0
+              ? ` | MOQ Corrugator (500m): ${cbf.moqResult.roundedMoq.toLocaleString('id-ID')} pcs (${cbf.moqResult.out} Out · Kelipatan 50)`
+              : '';
           const pcsText =
             cbf.hargaPerSheetRp !== undefined
-              ? ` | Luas ${queryLengthMm}x${queryWidthMm}mm (${cbf.areaPerSheetM2?.toFixed(5)} M²) => Harga/Pcs = ${formatRupiah(cbf.hargaPerSheetRp)}`
+              ? ` | Luas ${queryLengthMm}x${queryWidthMm}mm (${cbf.areaPerSheetM2?.toFixed(5)} M²) => Harga/Pcs = ${formatRupiah(cbf.hargaPerSheetRp)}${moqPart}`
               : '';
           deterministicPreCalcLines.push(
             `• Double Wall 5-Layer ${cbf.inputSubstanceString} [${mg.label}] -> Acuan: #${cbf.baseRowNo} ${cbf.mappedReferenceSubstance} (${formatRupiah(cbf.basePrice)}) | Virtual Base: ${formatRupiah(cbf.virtualBase)} (+Rp ${cbf.totalNominalUpgrade}) | Additive Modifier: ${cbf.totalAdditiveModifierPercent > 0 ? '+' : ''}${cbf.totalAdditiveModifierPercent}% (Margin ${cbf.marginPercent}% + Mult ${cbf.totalMultiplierPercent}% - Diskon DW ${cbf.totalDowngradePercent}%) => HASIL EKSAK CB/F = ${formatRupiah(cbf.hargaBersihPerM2)}/M² (mentah ${cbf.hargaFinalMentah.toFixed(2)})${pcsText}`
@@ -430,9 +434,13 @@ export function buildSmartRagAndPreCalcContext(
         const ef = calcForFlute('E/F');
 
         if (bf.success && cf.success && ef.success) {
+          const moqPart =
+            bf.moqResult && bf.moqResult.roundedMoq > 0
+              ? ` | MOQ Corrugator (500m): ${bf.moqResult.roundedMoq.toLocaleString('id-ID')} pcs (${bf.moqResult.out} Out · Kelipatan 50)`
+              : '';
           const pcsText =
             bf.hargaPerSheetRp !== undefined
-              ? ` | Harga/Pcs (${queryLengthMm}x${queryWidthMm}mm): B/F=${formatRupiah(bf.hargaPerSheetRp)}, C/F=${formatRupiah(cf.hargaPerSheetRp!)}, E/F=${formatRupiah(ef.hargaPerSheetRp!)}`
+              ? ` | Harga/Pcs (${queryLengthMm}x${queryWidthMm}mm): B/F=${formatRupiah(bf.hargaPerSheetRp)}, C/F=${formatRupiah(cf.hargaPerSheetRp!)}, E/F=${formatRupiah(ef.hargaPerSheetRp!)}${moqPart}`
               : '';
           deterministicPreCalcLines.push(
             `• Single Wall 3-Layer ${sp.top}/${sp.mid}/${sp.bot} [${mg.label}] -> Acuan: #${bf.baseRowNo} ${bf.mappedReferenceSubstance}${bf.autoSwapped ? ' (Auto-Swap)' : ''} | Virtual Base B/F: ${formatRupiah(bf.virtualBase)} (+Rp ${bf.totalNominalUpgrade}) | Downgrade SW: -${bf.totalDowngradePercent}% | Total Additive Mod B/F: ${bf.totalAdditiveModifierPercent > 0 ? '+' : ''}${bf.totalAdditiveModifierPercent}% => HASIL EKSAK: B/F = ${formatRupiah(bf.hargaBersihPerM2)}/M² (mentah ${bf.hargaFinalMentah.toFixed(2)}), C/F = ${formatRupiah(cf.hargaBersihPerM2)}/M², E/F = ${formatRupiah(ef.hargaBersihPerM2)}/M² (Mod E/F: ${ef.totalAdditiveModifierPercent > 0 ? '+' : ''}${ef.totalAdditiveModifierPercent}%)${pcsText}`

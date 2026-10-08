@@ -7,10 +7,10 @@ import {
 
 interface BreakdownTypewriterProps {
   result: PricingCalculationResult;
-  customer?: CustomerDiscountItem;
+  customer?: CustomerDiscountItem | null;
   customerMarginResolution?: {
     effectiveMarginPercent: number;
-    usedCustomer275OrEfRate: boolean;
+    customerSpecial275EfOverrideActive: boolean;
     modeLabel: string;
   } | null;
 }
@@ -124,15 +124,67 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
     ];
 
     if (result.areaPerSheetM2 && result.hargaPerSheetRp !== undefined) {
+      const detailLines: string[] = [
+        `• Luas (${result.input.sheetLengthMm} × ${result.input.sheetWidthMm} mm) = ${result.areaPerSheetM2.toFixed(
+          5
+        )} M² × ${formatRupiah(result.hargaBersihPerM2)}`,
+      ];
+
+      if (result.moqResult && result.moqResult.roundedMoq > 0) {
+        detailLines.push(
+          `• Deckle Corrugator (2.480 mm): ${result.moqResult.out} Out (Lebar ${result.input.sheetWidthMm} mm)`
+        );
+        detailLines.push(
+          `• MOQ Produksi (Min. 500 Meter): ${result.moqResult.roundedMoq.toLocaleString('id-ID')} Lembar (Kelipatan 50 ke atas dari ${result.moqResult.rawMoq.toLocaleString('id-ID')} pcs)`
+        );
+      }
+
+      if (result.moqResult?.validation.warnings && result.moqResult.validation.warnings.length > 0) {
+        result.moqResult.validation.warnings.forEach((w) => {
+          detailLines.push(`• ⚠️ Peringatan: ${w.title} — ${w.message}`);
+        });
+      }
+
       list.push({
         id: 5,
-        title: `5. Konversi Luas Area & Harga / Pcs`,
-        detailLines: [
-          `• Luas (${result.input.sheetLengthMm} × ${result.input.sheetWidthMm} mm) = ${result.areaPerSheetM2.toFixed(
-            5
-          )} M² × ${formatRupiah(result.hargaBersihPerM2)}`,
-        ],
+        title: `5. Konversi Luas Area, MOQ & Harga / Pcs`,
+        detailLines,
         valueText: formatRupiah(result.hargaPerSheetRp),
+        tone: 'accent',
+      });
+    }
+
+    if (result.weightResult && result.weightResult.beratPerPcsGram > 0) {
+      const weightLines: string[] = [
+        `• Total Gramatur: ${result.weightResult.totalGsm} g/m² (${result.weightResult.fluteDetailsText})`,
+        `• Berat / Pcs: ${result.weightResult.beratPerPcsGram.toLocaleString('id-ID', {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 2,
+        })} gram (${result.weightResult.beratPerPcsKg.toFixed(4)} kg / lembar)`,
+        `• Rp / Kg: Rp ${result.weightResult.rpPerKg.toLocaleString('id-ID')} / kg (Harga/Pcs ÷ Berat/Pcs)`,
+      ];
+
+      if (result.input.quantityPcs && result.weightResult.tonaseKg > 0) {
+        weightLines.push(
+          `• Total Tonase (${result.input.quantityPcs.toLocaleString('id-ID')} pcs): ${result.weightResult.tonaseKg.toLocaleString(
+            'id-ID',
+            { minimumFractionDigits: 1, maximumFractionDigits: 2 }
+          )} kg (${result.weightResult.tonaseTon.toFixed(3)} Ton)`
+        );
+      } else if (result.weightResult.moqTonaseKg && result.moqResult) {
+        weightLines.push(
+          `• Acuan Tonase MOQ (${result.moqResult.roundedMoq.toLocaleString('id-ID')} pcs): ${result.weightResult.moqTonaseKg.toLocaleString(
+            'id-ID',
+            { minimumFractionDigits: 1, maximumFractionDigits: 2 }
+          )} kg (${result.weightResult.moqTonaseTon?.toFixed(3)} Ton)`
+        );
+      }
+
+      list.push({
+        id: 6,
+        title: `6. Spesifikasi Berat Karton, Tonase & Nilai Rp / Kg`,
+        detailLines: weightLines,
+        valueText: `Rp ${result.weightResult.rpPerKg.toLocaleString('id-ID')}/kg`,
         tone: 'accent',
       });
     }
