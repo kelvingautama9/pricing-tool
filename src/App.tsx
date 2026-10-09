@@ -277,6 +277,19 @@ export default function App() {
   const [marginStr, setMarginStr] = useState<string>('9.5');
   const [quoteTitle, setQuoteTitle] = useState<string>('');
 
+  // Screen width observer for responsive liquid animation direction (horizontal on desktop, vertical on mobile)
+  const [isDesktop, setIsDesktop] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 640 : true
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 640);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Hide/Show toggles (Default HIDE for breakdown & WhatsApp; Sheet Dimensions visible for Pcs)
   const [showOrderBreakdown, setShowOrderBreakdown] = useState<boolean>(false);
   const [showWhatsAppSection, setShowWhatsAppSection] = useState<boolean>(false);
@@ -926,29 +939,26 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Conditional Layer Dropdowns: Smooth Liquid Popup Morphing between 3-Layer (SW/E-Flute) and 5-Layer (CB/F) */}
+                      {/* Conditional Layer Dropdowns: Ultra-Smooth Liquid Popup & Staged Morphing between 3-Layer and 5-Layer (CB/F) */}
                       <motion.div
                         layout
                         transition={{
-                          layout: { type: 'spring', stiffness: 420, damping: 30, mass: 0.75 },
+                          layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
                         }}
-                        className={`relative z-30 grid ${
-                          flute === 'CB/F'
-                            ? 'grid-cols-1 sm:grid-cols-5 gap-3 sm:gap-2'
-                            : 'grid-cols-1 sm:grid-cols-3 gap-3'
-                        } items-start`}
+                        className="relative z-30 flex flex-col sm:flex-row items-stretch sm:items-start gap-2.5 sm:gap-2"
                       >
-                        {/* 1. TOP LAYER (Smoothly morphs between 3-layer and 5-layer grid) */}
+                        {/* 1. TOP LAYER */}
                         <motion.div
                           layout
                           key="layer-slot-top"
                           transition={{
-                            layout: { type: 'spring', stiffness: 430, damping: 29, mass: 0.7 },
+                            layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
                           }}
-                          className="min-w-0"
+                          style={{ willChange: 'transform', transform: 'translateZ(0)' }}
+                          className="flex-1 min-w-0"
                         >
                           <CustomPopoverDropdown
-                            label={flute === 'CB/F' ? 'Top Layer' : 'Top Layer'}
+                            label="Top Layer"
                             compact={flute === 'CB/F'}
                             value={topLayer}
                             options={OUTER_LAYER_OPTIONS}
@@ -957,47 +967,65 @@ export default function App() {
                           />
                         </motion.div>
 
-                        {/* 2. FLUTE 1 LAYER (Liquid Pop-In when switching to CB/F, Liquid Pop-Out when returning to SW/EF) */}
-                        <AnimatePresence mode="popLayout" initial={false}>
+                        {/* 2. FLUTE 1 LAYER (Liquid Stage 1: Ultra-smooth collapse & liquid spring pop) */}
+                        <AnimatePresence initial={false}>
                           {flute === 'CB/F' && (
                             <motion.div
                               layout
                               key="layer-slot-flute1"
-                              initial={{ opacity: 0, scale: 0.72, y: 10, filter: 'blur(4px)' }}
-                              animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                              exit={{ opacity: 0, scale: 0.72, y: -8, filter: 'blur(4px)' }}
+                              initial={
+                                isDesktop
+                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
+                                  : { opacity: 0, scale: 0.92, height: 0 }
+                              }
+                              animate={
+                                isDesktop
+                                  ? { opacity: 1, scale: 1, width: 'auto', flexGrow: 1, flexBasis: '0%' }
+                                  : { opacity: 1, scale: 1, height: 'auto' }
+                              }
+                              exit={
+                                isDesktop
+                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
+                                  : { opacity: 0, scale: 0.92, height: 0 }
+                              }
                               transition={{
-                                type: 'spring',
-                                stiffness: 460,
-                                damping: 26,
-                                mass: 0.65,
+                                opacity: { duration: 0.18, ease: 'easeInOut' },
+                                scale: { type: 'spring', stiffness: 320, damping: 24 },
+                                flexGrow: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                                width: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                                height: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                                layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
                               }}
-                              className="min-w-0"
+                              style={{ willChange: 'transform, opacity, width, height', transform: 'translateZ(0)' }}
+                              className="min-w-0 overflow-hidden"
                             >
-                              <CustomPopoverDropdown
-                                label="Flute 1"
-                                compact={flute === 'CB/F'}
-                                value={flute1Layer}
-                                options={MID_LAYER_OPTIONS}
-                                groups={['Medium', 'Kraft']}
-                                warningNote="Inner Layer: Tanpa K110, K125, K135."
-                                onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
-                              />
+                              <div className="w-full sm:min-w-[90px]">
+                                <CustomPopoverDropdown
+                                  label="Flute 1"
+                                  compact={true}
+                                  value={flute1Layer}
+                                  options={MID_LAYER_OPTIONS}
+                                  groups={['Medium', 'Kraft']}
+                                  warningNote="Inner Layer: Tanpa K110, K125, K135."
+                                  onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
+                                />
+                              </div>
                             </motion.div>
                           )}
                         </AnimatePresence>
 
-                        {/* 3. MIDDLE LAYER (Smoothly morphs between 3-layer and 5-layer grid) */}
+                        {/* 3. MIDDLE LAYER (Liquid Stage 2: Bouncy Spring Adjustment Movement) */}
                         <motion.div
                           layout
                           key="layer-slot-mid"
                           transition={{
-                            layout: { type: 'spring', stiffness: 430, damping: 29, mass: 0.7 },
+                            layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
                           }}
-                          className="min-w-0"
+                          style={{ willChange: 'transform', transform: 'translateZ(0)' }}
+                          className="flex-1 min-w-0"
                         >
                           <CustomPopoverDropdown
-                            label={flute === 'CB/F' ? 'Middle Layer' : 'Middle Layer'}
+                            label="Middle Layer"
                             compact={flute === 'CB/F'}
                             value={midLayer}
                             options={MID_LAYER_OPTIONS}
@@ -1008,48 +1036,66 @@ export default function App() {
                           />
                         </motion.div>
 
-                        {/* 4. FLUTE 2 LAYER (Liquid Pop-In when switching to CB/F, Liquid Pop-Out when returning to SW/EF) */}
-                        <AnimatePresence mode="popLayout" initial={false}>
+                        {/* 4. FLUTE 2 LAYER (Liquid Stage 1: Ultra-smooth staggered collapse & bouncy pop) */}
+                        <AnimatePresence initial={false}>
                           {flute === 'CB/F' && (
                             <motion.div
                               layout
                               key="layer-slot-flute2"
-                              initial={{ opacity: 0, scale: 0.72, y: 10, filter: 'blur(4px)' }}
-                              animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-                              exit={{ opacity: 0, scale: 0.72, y: -8, filter: 'blur(4px)' }}
+                              initial={
+                                isDesktop
+                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
+                                  : { opacity: 0, scale: 0.92, height: 0 }
+                              }
+                              animate={
+                                isDesktop
+                                  ? { opacity: 1, scale: 1, width: 'auto', flexGrow: 1, flexBasis: '0%' }
+                                  : { opacity: 1, scale: 1, height: 'auto' }
+                              }
+                              exit={
+                                isDesktop
+                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
+                                  : { opacity: 0, scale: 0.92, height: 0 }
+                              }
                               transition={{
-                                type: 'spring',
-                                stiffness: 460,
-                                damping: 26,
-                                mass: 0.65,
+                                opacity: { duration: 0.18, ease: 'easeInOut' },
+                                scale: { type: 'spring', stiffness: 320, damping: 24 },
+                                flexGrow: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                                width: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                                height: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                                layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
                               }}
-                              className="min-w-0"
+                              style={{ willChange: 'transform, opacity, width, height', transform: 'translateZ(0)' }}
+                              className="min-w-0 overflow-hidden"
                             >
-                              <CustomPopoverDropdown
-                                label="Flute 2"
-                                compact={flute === 'CB/F'}
-                                value={flute2Layer}
-                                options={MID_LAYER_OPTIONS}
-                                groups={['Medium', 'Kraft']}
-                                align="right"
-                                warningNote="Inner Layer: Tanpa K110, K125, K135."
-                                onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
-                              />
+                              <div className="w-full sm:min-w-[90px]">
+                                <CustomPopoverDropdown
+                                  label="Flute 2"
+                                  compact={true}
+                                  value={flute2Layer}
+                                  options={MID_LAYER_OPTIONS}
+                                  groups={['Medium', 'Kraft']}
+                                  align="right"
+                                  warningNote="Inner Layer: Tanpa K110, K125, K135."
+                                  onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
+                                />
+                              </div>
                             </motion.div>
                           )}
                         </AnimatePresence>
 
-                        {/* 5. BOTTOM LAYER (Smoothly morphs between 3-layer and 5-layer grid) */}
+                        {/* 5. BOTTOM LAYER (Liquid Stage 2: Bouncy Spring Adjustment Movement) */}
                         <motion.div
                           layout
                           key="layer-slot-bot"
                           transition={{
-                            layout: { type: 'spring', stiffness: 430, damping: 29, mass: 0.7 },
+                            layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
                           }}
-                          className="min-w-0"
+                          style={{ willChange: 'transform', transform: 'translateZ(0)' }}
+                          className="flex-1 min-w-0"
                         >
                           <CustomPopoverDropdown
-                            label={flute === 'CB/F' ? 'Bottom Layer' : 'Bottom Layer'}
+                            label="Bottom Layer"
                             compact={flute === 'CB/F'}
                             value={botLayer}
                             options={OUTER_LAYER_OPTIONS}
@@ -1115,12 +1161,20 @@ export default function App() {
                           <label className="text-xs font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tracking-tight shrink-0">
                             Diskon / Margin (%)
                           </label>
-                          <span className="text-[10px] font-mono text-neutral-400 dark:text-neutral-500 tabular-nums text-right truncate">
-                            {currentInput.marginPercent < 0
-                              ? `Potongan Harga (${currentInput.marginPercent}%)`
-                              : currentInput.marginPercent > 0
-                              ? `Mark-Up Harga (+${currentInput.marginPercent}%)`
-                              : 'Harga Normal (0%)'}
+                          <span className="text-[10px] font-mono tabular-nums text-right truncate">
+                            {currentInput.marginPercent < 0 ? (
+                              <span className="text-red-700 dark:text-red-400 font-bold">
+                                Potongan Harga ({currentInput.marginPercent}%)
+                              </span>
+                            ) : currentInput.marginPercent > 0 ? (
+                              <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                                Mark-Up Harga (+{currentInput.marginPercent}%)
+                              </span>
+                            ) : (
+                              <span className="text-[#1C1B1A] dark:text-[#F2EFE9] font-bold">
+                                Harga Normal (0%)
+                              </span>
+                            )}
                             {activeCustomer && customerMarginResolution
                               ? ` · ${
                                   customerMarginResolution.customerSpecial275EfOverrideActive
@@ -1140,8 +1194,10 @@ export default function App() {
                               title="Ubah Plus (+) atau Minus (-)"
                               className={`h-9 px-2.5 rounded-l-md border border-r-0 font-mono text-xs font-bold transition-colors cursor-pointer ${
                                 currentInput.marginPercent < 0
-                                  ? 'bg-emerald-600/12 border-emerald-600/30 text-emerald-700 dark:text-emerald-400'
-                                  : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/10 dark:border-white/10 text-[#C65D3B]'
+                                  ? 'bg-red-700/10 border-red-700/30 text-red-700 dark:text-red-400 font-bold'
+                                  : currentInput.marginPercent > 0
+                                  ? 'bg-emerald-700/10 border-emerald-700/30 text-emerald-700 dark:text-emerald-400 font-bold'
+                                  : 'bg-[#F3F1ED] dark:bg-[#22201E] border-black/10 dark:border-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] font-bold'
                               }`}
                             >
                               {currentInput.marginPercent < 0 ? '−' : '+'}
@@ -1176,11 +1232,12 @@ export default function App() {
                           />
                         </div>
 
-                        {/* Quick Signed Presets (-10%, -5%, 0%, +5%, +9%, +13%) */}
-                        <div className="flex items-center gap-1">
+                        {/* Quick Signed Presets (-10%, -5%, 0%, +5%, +9%, +13%) — 4 cols on mobile, 1 row on sm desktop */}
+                        <div className="grid grid-cols-4 sm:flex sm:items-center gap-1">
                           {['-10', '-5', '-2.5', '0', '5', '7.5', '9', '13'].map((mVal) => {
                             const num = parseFloat(mVal);
                             const label = num > 0 ? `+${mVal}%` : `${mVal}%`;
+                            const isSelected = marginStr === mVal;
                             return (
                               <button
                                 key={mVal}
@@ -1189,10 +1246,18 @@ export default function App() {
                                   setMarginStr(mVal);
                                   setSelectedCustomerId(null);
                                 }}
-                                className={`flex-1 py-1 rounded-xs text-[10px] font-mono transition-colors duration-150 cursor-pointer tabular-nums ${
-                                  marginStr === mVal
-                                    ? 'bg-[#C65D3B] text-white font-semibold'
-                                    : 'bg-[#F3F1ED] dark:bg-[#22201E] text-neutral-500 dark:text-neutral-400 hover:text-[#1C1B1A] dark:hover:text-white'
+                                className={`py-1.5 sm:py-1 sm:flex-1 rounded-xs text-[10px] font-mono text-center transition-colors duration-150 cursor-pointer tabular-nums ${
+                                  isSelected
+                                    ? num < 0
+                                      ? 'bg-red-700 text-white font-bold ring-1 ring-red-800'
+                                      : num > 0
+                                      ? 'bg-emerald-700 text-white font-bold ring-1 ring-emerald-800'
+                                      : 'bg-[#1C1B1A] dark:bg-white text-white dark:text-[#1C1B1A] font-bold'
+                                    : num < 0
+                                    ? 'bg-[#F3F1ED] dark:bg-[#22201E] text-red-700 dark:text-red-400 font-bold hover:bg-red-50 dark:hover:bg-red-950/30'
+                                    : num > 0
+                                    ? 'bg-[#F3F1ED] dark:bg-[#22201E] text-emerald-700 dark:text-emerald-400 font-bold hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                                    : 'bg-[#F3F1ED] dark:bg-[#22201E] text-[#1C1B1A] dark:text-[#F2EFE9] font-bold hover:bg-black/10 dark:hover:bg-white/10'
                                 }`}
                               >
                                 {label}
@@ -1558,11 +1623,17 @@ export default function App() {
                                   {calculationResult.areaPerSheetM2.toFixed(5)} M²
                                 </span>
                               </div>
-                              <div className="flex items-center justify-between py-1.5 px-2.5 rounded-sm bg-[#C65D3B]/10 dark:bg-[#C65D3B]/15 border-l-2 border-[#C65D3B] my-1 transition-colors">
-                                <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs sm:text-[12.5px] tracking-tight">
-                                  Harga / Pcs (Lembar):
-                                </span>
-                                <span className="text-base sm:text-lg font-bold text-[#C65D3B] font-mono tabular-nums drop-shadow-2xs">
+                              {/* Highlighted Harga / Pcs (Lembar) without separate nested container box */}
+                              <div className="flex items-center justify-between py-2 px-3 rounded-md bg-[#C65D3B]/15 dark:bg-[#C65D3B]/25 border-l-[3.5px] border-[#C65D3B] my-2 transition-colors">
+                                <div className="flex flex-col">
+                                  <span className="font-extrabold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs sm:text-[13px] tracking-tight uppercase">
+                                    Harga / Pcs (Lembar)
+                                  </span>
+                                  <span className="text-[10px] text-neutral-500 dark:text-neutral-400 font-sans">
+                                    Harga satuan lembar karton box
+                                  </span>
+                                </div>
+                                <span className="text-lg sm:text-2xl font-black text-[#C65D3B] font-mono tabular-nums tracking-tight">
                                   {formatRupiah(calculationResult.hargaPerSheetRp)}
                                 </span>
                               </div>

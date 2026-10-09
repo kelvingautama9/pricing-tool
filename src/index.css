@@ -98,5 +98,11 @@ input {
   }
 }
 
+/* Layer morph container & hardware acceleration */
+.layer-slot-wrapper {
+  will-change: transform, opacity, height;
+  contain: paint layout;
+}
+
 
 

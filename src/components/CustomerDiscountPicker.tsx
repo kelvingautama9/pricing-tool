@@ -229,9 +229,9 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
         </button>
       </div>
 
-      {/* Floating Popover Card */}
+      {/* Floating Popover Card — Mobile Safe Anchor that avoids collision or overflow */}
       {isOpen && (
-        <div className="absolute right-0 mt-1.5 w-[calc(100vw-2rem)] max-w-sm sm:w-96 z-50 rounded-md p-2.5 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/15 dark:border-white/15 shadow-xl text-xs text-[#1C1B1A] dark:text-[#F2EFE9]">
+        <div className="fixed inset-x-3 sm:inset-x-auto top-auto sm:top-full mt-1.5 sm:right-0 sm:absolute w-auto sm:w-96 max-w-sm sm:max-w-none z-50 rounded-md p-2.5 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/15 dark:border-white/15 shadow-2xl text-xs text-[#1C1B1A] dark:text-[#F2EFE9]">
           {/* Top Search & Add Bar */}
           <div className="flex items-center gap-1.5 mb-2">
             <div className="relative flex-1">
@@ -433,14 +433,24 @@ export const CustomerDiscountPicker: React.FC<CustomerDiscountPickerProps> = ({
                         <span
                           className={
                             cust.swMarginPercent < 0
-                              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                              : 'text-[#C65D3B] font-semibold'
+                              ? 'text-red-700 dark:text-red-400 font-bold'
+                              : cust.swMarginPercent > 0
+                              ? 'text-emerald-700 dark:text-emerald-400 font-bold'
+                              : 'text-[#1C1B1A] dark:text-[#F2EFE9] font-bold'
                           }
                         >
                           SW: {formatSignedPercent(cust.swMarginPercent)}
                         </span>
                         <span className="text-neutral-300 dark:text-neutral-600">|</span>
-                        <span className="text-neutral-400 dark:text-neutral-500">
+                        <span
+                          className={
+                            cust.dwMarginPercent < 0
+                              ? 'text-red-700 dark:text-red-400 font-bold'
+                              : cust.dwMarginPercent > 0
+                              ? 'text-emerald-700 dark:text-emerald-400 font-bold'
+                              : 'text-[#1C1B1A] dark:text-[#F2EFE9] font-bold'
+                          }
+                        >
                           275/EF: {formatSignedPercent(cust.dwMarginPercent)}
                         </span>
                       </div>

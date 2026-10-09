@@ -1268,8 +1268,10 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                             <span
                               className={
                                 cust.swMarginPercent < 0
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-[#C65D3B]'
+                                  ? 'text-red-700 dark:text-red-400 font-bold'
+                                  : cust.swMarginPercent > 0
+                                  ? 'text-emerald-700 dark:text-emerald-400 font-bold'
+                                  : 'text-[#1C1B1A] dark:text-[#F2EFE9] font-bold'
                               }
                             >
                               SW: {swSign}
@@ -1278,7 +1280,15 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                             <span className="text-neutral-300 dark:text-neutral-600">
                               |
                             </span>
-                            <span className="text-neutral-400">
+                            <span
+                              className={
+                                cust.dwMarginPercent < 0
+                                  ? 'text-red-700 dark:text-red-400 font-bold'
+                                  : cust.dwMarginPercent > 0
+                                  ? 'text-emerald-700 dark:text-emerald-400 font-bold'
+                                  : 'text-[#1C1B1A] dark:text-[#F2EFE9] font-bold'
+                              }
+                            >
                               275/EF: {dwSign}
                               {cust.dwMarginPercent}%
                             </span>

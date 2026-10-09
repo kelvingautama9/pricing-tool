@@ -164,16 +164,16 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
         </div>
       </button>
 
-      {/* Floating Popover Surface */}
+      {/* Floating Popover Surface — Clean responsive alignment that never collides or overflows mobile screen */}
       {isOpen && (
         <div
           className={`absolute ${
             align === 'right'
               ? 'right-0'
               : align === 'center'
-              ? 'left-1/2 -translate-x-1/2'
+              ? 'left-0 sm:left-1/2 sm:-translate-x-1/2'
               : 'left-0'
-          } mt-1.5 w-full min-w-[210px] sm:min-w-[230px] z-50 rounded-md p-2 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/12 dark:border-white/15 shadow-xl text-xs text-[#1C1B1A] dark:text-[#F2EFE9] origin-top animate-[liquidPop_0.22s_cubic-bezier(0.22,1,0.36,1)]`}
+          } mt-1.5 w-full sm:w-auto min-w-full sm:min-w-[230px] max-w-[calc(100vw-2rem)] sm:max-w-none z-50 rounded-md p-2 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/12 dark:border-white/15 shadow-xl text-xs text-[#1C1B1A] dark:text-[#F2EFE9] origin-top animate-[liquidPop_0.22s_cubic-bezier(0.22,1,0.36,1)]`}
         >
           {/* Segmented Filter Tabs inside Popover (clean compact tab pills that never wrap or overflow) */}
           {groups && groups.length > 0 && (
