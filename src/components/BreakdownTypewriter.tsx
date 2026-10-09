@@ -562,7 +562,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xs bg-[#C65D3B]/10 dark:bg-[#C65D3B]/15 border-l-[3px] border-[#C65D3B] text-xs">
             <div className="min-w-0 pr-1">
               <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] block tracking-tight">
-                Harga / Pcs
+                Harga/Pcs
               </span>
               <span className="text-[10px] text-neutral-500 dark:text-neutral-400 font-mono block">
                 {result.areaPerSheetM2.toFixed(5)} M² × {formatRupiah(result.hargaBersihPerM2)}

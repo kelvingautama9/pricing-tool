@@ -1659,16 +1659,11 @@ export default function App() {
                                   {calculationResult.areaPerSheetM2.toFixed(5)} M²
                                 </span>
                               </div>
-                              {/* Highlighted Harga / Pcs (Lembar) without separate nested container box */}
-                              <div className="flex items-center justify-between py-2 px-3 rounded-md bg-[#C65D3B]/15 dark:bg-[#C65D3B]/25 border-l-[3.5px] border-[#C65D3B] my-2 transition-colors">
-                                <div className="flex flex-col">
-                                  <span className="font-extrabold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs sm:text-[13px] tracking-tight uppercase">
-                                    Harga / Pcs (Lembar)
-                                  </span>
-                                  <span className="text-[10px] text-neutral-500 dark:text-neutral-400 font-sans">
-                                    Harga satuan lembar karton box
-                                  </span>
-                                </div>
+                              {/* Highlighted Harga/Pcs */}
+                              <div className="flex items-center justify-between py-2.5 px-3 rounded-md bg-[#C65D3B]/15 dark:bg-[#C65D3B]/25 border-l-[3.5px] border-[#C65D3B] my-2 transition-colors">
+                                <span className="font-extrabold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs sm:text-sm tracking-tight">
+                                  Harga/Pcs
+                                </span>
                                 <span className="text-lg sm:text-2xl font-black text-[#C65D3B] font-mono tabular-nums tracking-tight">
                                   {formatRupiah(calculationResult.hargaPerSheetRp)}
                                 </span>
