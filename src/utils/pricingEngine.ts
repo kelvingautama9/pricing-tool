@@ -249,12 +249,12 @@ export const MOQ_ROUNDING_MULTIPLE = 50;
  *    Diekstrak dari kode bahan (misal M125 -> 125, K150 -> 150, K200 -> 200, K275 -> 275).
  * 2. Faktor Gelombang (Take-Up Factor):
  *    - B/F: 1.35
- *    - C/F: 1.44
+ *    - C/F: 1.45
  *    - E/F: 1.25
- *    - CB/F (Double Wall): Flute 1 (C Flute) = 1.44 | Flute 2 (B Flute) = 1.35
+ *    - CB/F (Double Wall): Flute 1 (C Flute) = 1.45 | Flute 2 (B Flute) = 1.35
  * 3. Total Gramatur Sheet (Total GSM g/m²):
  *    - Single Wall (SW): Top + (Mid × TakeUp) + Bot
- *    - Double Wall (DW CB/F): Top + (Flute1 × 1.44) + Mid + (Flute2 × 1.35) + Bot
+ *    - Double Wall (DW CB/F): Top + (Flute1 × 1.45) + Mid + (Flute2 × 1.35) + Bot
  * 4. Berat per M² (kg/m²):
  *    - Total GSM / 1.000
  * 5. Berat per Pcs (Lembar):
@@ -299,9 +299,9 @@ export const FLUTE_TAKE_UP_FACTORS: Record<
   }
 > = {
   'B/F': { flute1: 1.35, description: 'Take-up B/F (1.35)' },
-  'C/F': { flute1: 1.44, description: 'Take-up C/F (1.44)' },
+  'C/F': { flute1: 1.45, description: 'Take-up C/F (1.45)' },
   'E/F': { flute1: 1.25, description: 'Take-up E/F (1.25)' },
-  'CB/F': { flute1: 1.44, flute2: 1.35, description: 'Take-up C (1.44) + B (1.35)' },
+  'CB/F': { flute1: 1.45, flute2: 1.35, description: 'Take-up C (1.45) + B (1.35)' },
 };
 
 /**

@@ -194,8 +194,8 @@ Tugas Utama Anda (Multitasking):
    - Peringatan Merah: Jika panjang/lebar di luar batas standar (P < 500, P > 2600, L < 300, L > 2480) atau lebar non-standar (1.251 – 1.649 mm afval tinggi), sistem menampilkan peringatan/notes namun kalkulasi harga tetap berjalan untuk estimasi.
 4. **Logika Perhitungan Berat Karton Sheet, Tonase & Nilai Rp / Kg:**
    - Ekstraksi GSM: Angka kode bahan adalah gramasi (g/m²). Contoh: M125 = 125, K150 = 150, K200 = 200, K275 = 275 gsm.
-   - Faktor Take-Up: B/F = 1.35 | C/F = 1.44 | E/F = 1.25. Untuk Double Wall (CB/F): Flute 1 (C) = 1.44, Flute 2 (B) = 1.35.
-   - Total GSM: Single Wall = Top + (Mid × FluteFactor) + Bot. Double Wall CB/F = Top + (Flute1 × 1.44) + Mid + (Flute2 × 1.35) + Bot.
+   - Faktor Take-Up: B/F = 1.35 | C/F = 1.45 | E/F = 1.25. Untuk Double Wall (CB/F): Flute 1 (C) = 1.45, Flute 2 (B) = 1.35.
+   - Total GSM: Single Wall = Top + (Mid × FluteFactor) + Bot. Double Wall CB/F = Top + (Flute1 × 1.45) + Mid + (Flute2 × 1.35) + Bot.
    - Berat / Pcs: Gram = Luas M² × Total GSM | Kg = Gram / 1.000.
    - Tonase (kg & Ton): Berat / Pcs (kg) × Qty | Ton = kg / 1.000.
    - Nilai Rp / kg = Harga / Pcs (Rp) / Berat / Pcs (kg) (identik dengan Harga / M² / Berat / M²).

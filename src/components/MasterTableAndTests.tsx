@@ -245,8 +245,8 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
               Berat, Tonase & Rp / Kg
             </h3>
             <ul className="text-[9.5px] sm:text-xs space-y-0.5 sm:space-y-1 text-neutral-600 dark:text-neutral-300 font-mono tabular-nums leading-tight">
-              <li>• Take-Up: B 1.35 · C 1.44 · E 1.25</li>
-              <li>• DW: Flute1 C (1.44) + Flute2 B (1.35)</li>
+              <li>• Take-Up: B 1.35 · C 1.45 · E 1.25</li>
+              <li>• DW: Flute1 C (1.45) + Flute2 B (1.35)</li>
               <li>• Berat/Pcs = (Luas × GSM) / 1.000</li>
               <li>• Tonase = (Berat × Qty) / 1.000</li>
               <li>• Rp/kg = Harga Pcs ÷ Berat Pcs (kg)</li>
