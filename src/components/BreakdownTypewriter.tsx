@@ -70,7 +70,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       `Spesifikasi : ${result.inputSubstanceString} (${result.input.flute})`,
       `Tipe Dinding: ${result.isDoubleWall ? 'Double Wall 5-Layer' : 'Single Wall 3-Layer'}`,
       ``,
-      `1. Base Master Table (#${result.baseRowNo}):`,
+      `1. Base Master Table:`,
       `   • Acuan    : ${result.mappedReferenceSubstance} ${result.autoSwapped ? '(Auto-Swap)' : ''}`,
       `   • Base Rp  : ${formatRupiah(result.basePrice)} / M²`,
       ``,
@@ -84,7 +84,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       downgradeText,
       `   • Nominal  : ${modNominalSign}${formatRupiah(Math.abs(result.totalAdditiveNominalRp), true)} / M²`,
       ``,
-      `4. Harga Bersih / M²:`,
+      `4. Harga bersih (Per M²):`,
       `   • Rumus    : ${formatRupiah(result.virtualBase)} × (1 ${result.totalAdditiveModifierDecimal >= 0 ? '+' : '−'} ${Math.abs(result.totalAdditiveModifierDecimal).toFixed(4)})`,
       `   • Desimal  : Rp ${result.hargaFinalMentah.toFixed(2)}`,
       `   • Akhir    : ${formatRupiah(result.hargaBersihPerM2)} / M² (Pembulatan 5)`,
@@ -93,11 +93,12 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
     if (result.areaPerSheetM2 && result.hargaPerSheetRp !== undefined) {
       lines.push(
         ``,
-        `5. Luas Sheet & Harga / Pcs:`,
-        `   • Dimensi  : ${result.input.sheetLengthMm} × ${result.input.sheetWidthMm} mm (${result.areaPerSheetM2.toFixed(5)} M²)`,
+        `5. Hitung Luas & Harga/Pcs:`,
+        `   • Dimensi  : ${result.input.sheetLengthMm} × ${result.input.sheetWidthMm} mm`,
+        `   • Luas/Pcs : (${result.input.sheetLengthMm} × ${result.input.sheetWidthMm}) ÷ 1.000.000 = ${result.areaPerSheetM2.toFixed(5)} M²`,
         result.moqResult ? `   • MOQ      : ${result.moqResult.roundedMoq.toLocaleString('id-ID')} pcs (Min. 500m)` : '',
         `   • Rumus    : ${result.areaPerSheetM2.toFixed(5)} M² × ${formatRupiah(result.hargaBersihPerM2)}`,
-        `   • HARGA/PCS: ${formatRupiah(result.hargaPerSheetRp)} / lembar`
+        `   • HARGA/PCS: ${formatRupiah(result.hargaPerSheetRp)} / pcs`
       );
     }
 
@@ -177,12 +178,12 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       {/* Step 1: Base Harga Master Table                           */}
       {/* ========================================================= */}
       <div className="p-2.5 rounded-md bg-[#F9F8F6] dark:bg-[#1A1816] border border-black/6 dark:border-white/8 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="px-1.5 py-0.5 rounded-xs bg-[#1C1B1A]/8 dark:bg-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] font-mono text-[10px] font-bold shrink-0 whitespace-nowrap">
-              Langkah 1
+              Step 1
             </span>
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs truncate">
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
               Harga Dasar Master Table
             </span>
           </div>
@@ -192,7 +193,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[10.5px] font-mono pt-1 border-t border-black/4 dark:border-white/6 text-neutral-600 dark:text-neutral-400">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10.5px] font-mono pt-1 border-t border-black/4 dark:border-white/6 text-neutral-600 dark:text-neutral-400">
           <div className="p-1.5 rounded-xs bg-white dark:bg-[#141210] border border-black/4 dark:border-white/6">
             <span className="text-neutral-400 block text-[9px] uppercase tracking-wide">
               Acuan Master
@@ -209,14 +210,6 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
               {result.input.flute} · {result.isDoubleWall ? 'Double Wall (5L)' : 'Single Wall (3L)'}
             </span>
           </div>
-          <div className="p-1.5 rounded-xs bg-white dark:bg-[#141210] border border-black/4 dark:border-white/6">
-            <span className="text-neutral-400 block text-[9px] uppercase tracking-wide">
-              Baris Database
-            </span>
-            <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] block truncate">
-              Baris #{result.baseRowNo} {result.autoSwapped ? '· Auto-Swap' : ''}
-            </span>
-          </div>
         </div>
       </div>
 
@@ -224,12 +217,12 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       {/* Step 2: Virtual Base & Nominal Upgrades                   */}
       {/* ========================================================= */}
       <div className="p-2.5 rounded-md bg-[#F9F8F6] dark:bg-[#1A1816] border border-black/6 dark:border-white/8 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="px-1.5 py-0.5 rounded-xs bg-[#1C1B1A]/8 dark:bg-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] font-mono text-[10px] font-bold shrink-0 whitespace-nowrap">
-              Langkah 2
+              Step 2
             </span>
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs truncate">
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
               Pembentukan Virtual Base
             </span>
           </div>
@@ -278,12 +271,12 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       {/* Step 3: Sistem Modifier Additive (%)                      */}
       {/* ========================================================= */}
       <div className="p-2.5 rounded-md bg-[#F9F8F6] dark:bg-[#1A1816] border border-black/6 dark:border-white/8 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="px-1.5 py-0.5 rounded-xs bg-[#1C1B1A]/8 dark:bg-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] font-mono text-[10px] font-bold shrink-0 whitespace-nowrap">
-              Langkah 3
+              Step 3
             </span>
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs truncate">
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
               Sistem Modifier Additive (%)
             </span>
           </div>
@@ -440,13 +433,13 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       {/* Step 4: Harga Bersih / M² (Symmetrical Math Formula Card) */}
       {/* ========================================================= */}
       <div className="p-2.5 rounded-md bg-[#F9F8F6] dark:bg-[#1A1816] border border-black/6 dark:border-white/8 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="px-1.5 py-0.5 rounded-xs bg-[#1C1B1A]/8 dark:bg-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] font-mono text-[10px] font-bold shrink-0 whitespace-nowrap">
-              Langkah 4
+              Step 4
             </span>
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs truncate">
-              Harga Bersih Final (Per M²)
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
+              Harga bersih (Per M²)
             </span>
           </div>
           <div className="font-mono font-bold text-xs text-[#C65D3B] tabular-nums shrink-0 whitespace-nowrap text-right">
@@ -491,18 +484,18 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       {/* ========================================================= */}
       {result.areaPerSheetM2 && result.hargaPerSheetRp !== undefined && (
         <div className="p-2.5 rounded-md bg-[#F9F8F6] dark:bg-[#1A1816] border border-black/6 dark:border-white/8 space-y-2">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="px-1.5 py-0.5 rounded-xs bg-[#1C1B1A]/8 dark:bg-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] font-mono text-[10px] font-bold shrink-0 whitespace-nowrap">
-                Langkah 5
+                Step 5
               </span>
-              <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs truncate">
-                Perhitungan Luas Sheet & Harga / Pcs
+              <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
+                Hitung Luas & Harga/Pcs
               </span>
             </div>
             <div className="font-mono font-bold text-xs text-[#C65D3B] tabular-nums shrink-0 whitespace-nowrap text-right">
               {formatRupiah(result.hargaPerSheetRp)}{' '}
-              <span className="text-[10px] font-normal text-neutral-400">/ lembar</span>
+              <span className="text-[10px] font-normal text-neutral-400">/ pcs</span>
             </div>
           </div>
 
@@ -535,17 +528,47 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
             )}
           </div>
 
-          {/* Clean Prominent Highlight for Harga / Pcs (Lembar) */}
-          <div className="flex items-center justify-between p-2.5 rounded-xs bg-[#C65D3B]/10 dark:bg-[#C65D3B]/15 border-l-[3px] border-[#C65D3B] text-xs">
-            <div className="min-w-0 pr-2">
-              <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] block tracking-tight">
-                Harga / Pcs (Lembar)
+          {/* Rumus Hitung Luas — Bersih & Tanpa Dobel Tampilan Hasil */}
+          <div className="p-2 rounded-xs bg-white dark:bg-[#141210] border border-black/4 dark:border-white/6 space-y-1.5 text-[10px] font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-1 text-[#1C1B1A] dark:text-[#F2EFE9] font-bold">
+              <span>Rumus Hitung Luas</span>
+              <span className="text-[9px] text-neutral-400 font-normal">
+                (P × L ÷ 1.000.000)
               </span>
-              <span className="text-[10px] text-neutral-500 dark:text-neutral-400 font-mono whitespace-nowrap tabular-nums">
+            </div>
+            <div className="space-y-1 text-neutral-600 dark:text-neutral-300">
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span>- Panjang Lembar (P)</span>
+                <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tabular-nums">
+                  {result.input.sheetLengthMm} mm
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span>- Lebar Lembar (L)</span>
+                <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tabular-nums">
+                  {result.input.sheetWidthMm} mm
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <span>- Rumus Konversi Luas M²</span>
+                <span className="text-neutral-700 dark:text-neutral-300 font-medium tabular-nums">
+                  ({result.input.sheetLengthMm} × {result.input.sheetWidthMm}) ÷ 1.000.000
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Clean Prominent Highlight for Harga / Pcs (Cukup Hasil Disini yang Warna Orange) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xs bg-[#C65D3B]/10 dark:bg-[#C65D3B]/15 border-l-[3px] border-[#C65D3B] text-xs">
+            <div className="min-w-0 pr-1">
+              <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] block tracking-tight">
+                Harga / Pcs
+              </span>
+              <span className="text-[10px] text-neutral-500 dark:text-neutral-400 font-mono block">
                 {result.areaPerSheetM2.toFixed(5)} M² × {formatRupiah(result.hargaBersihPerM2)}
               </span>
             </div>
-            <div className="text-base sm:text-lg font-bold font-mono text-[#C65D3B] tabular-nums shrink-0 whitespace-nowrap text-right">
+            <div className="text-base sm:text-lg font-bold font-mono text-[#C65D3B] tabular-nums shrink-0 text-right">
               {formatRupiah(result.hargaPerSheetRp)}
             </div>
           </div>
@@ -557,12 +580,12 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       {/* ========================================================= */}
       {result.weightResult && result.weightResult.beratPerPcsGram > 0 && (
         <div className="p-2.5 rounded-md bg-[#F9F8F6] dark:bg-[#1A1816] border border-black/6 dark:border-white/8 space-y-2">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="px-1.5 py-0.5 rounded-xs bg-[#1C1B1A]/8 dark:bg-white/10 text-[#1C1B1A] dark:text-[#F2EFE9] font-mono text-[10px] font-bold shrink-0 whitespace-nowrap">
-                Langkah 6
+                Step 6
               </span>
-              <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs truncate">
+              <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
                 Spesifikasi Berat & Tonase
               </span>
             </div>

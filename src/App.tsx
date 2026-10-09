@@ -943,7 +943,7 @@ export default function App() {
                       <motion.div
                         layout
                         transition={{
-                          layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                          layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                         }}
                         className="relative z-30 flex flex-col sm:flex-row items-stretch sm:items-start gap-2.5 sm:gap-2"
                       >
@@ -952,7 +952,7 @@ export default function App() {
                           layout
                           key="layer-slot-top"
                           transition={{
-                            layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                            layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                           }}
                           style={{ willChange: 'transform', transform: 'translateZ(0)' }}
                           className="flex-1 min-w-0"
@@ -967,39 +967,57 @@ export default function App() {
                           />
                         </motion.div>
 
-                        {/* 2. FLUTE 1 LAYER (Liquid Stage 1: Ultra-smooth collapse & liquid spring pop) */}
+                        {/* 2. FLUTE 1 LAYER (Liquid Stage 1: Ultra-smooth collapse & liquid spring pop without layout-reversal bug) */}
                         <AnimatePresence initial={false}>
                           {flute === 'CB/F' && (
                             <motion.div
-                              layout
                               key="layer-slot-flute1"
                               initial={
                                 isDesktop
-                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
+                                  ? { opacity: 0, scale: 0.9, flex: 0, maxWidth: 0 }
                                   : { opacity: 0, scale: 0.92, height: 0 }
                               }
                               animate={
                                 isDesktop
-                                  ? { opacity: 1, scale: 1, width: 'auto', flexGrow: 1, flexBasis: '0%' }
+                                  ? { opacity: 1, scale: 1, flex: 1, maxWidth: '100%' }
                                   : { opacity: 1, scale: 1, height: 'auto' }
                               }
                               exit={
                                 isDesktop
-                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
-                                  : { opacity: 0, scale: 0.92, height: 0 }
+                                  ? {
+                                      opacity: 0,
+                                      scale: 0.88,
+                                      flex: 0,
+                                      maxWidth: 0,
+                                      transition: {
+                                        opacity: { duration: 0.16, ease: 'easeOut' },
+                                        scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                                        flex: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+                                        maxWidth: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+                                      },
+                                    }
+                                  : {
+                                      opacity: 0,
+                                      scale: 0.9,
+                                      height: 0,
+                                      transition: {
+                                        opacity: { duration: 0.16, ease: 'easeOut' },
+                                        scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                                        height: { duration: 0.26, ease: [0.16, 1, 0.3, 1] },
+                                      },
+                                    }
                               }
                               transition={{
-                                opacity: { duration: 0.18, ease: 'easeInOut' },
-                                scale: { type: 'spring', stiffness: 320, damping: 24 },
-                                flexGrow: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
-                                width: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
-                                height: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
-                                layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                                opacity: { duration: 0.22, ease: 'easeOut' },
+                                scale: { type: 'spring', stiffness: 320, damping: 25 },
+                                flex: { type: 'spring', stiffness: 280, damping: 26, mass: 0.8 },
+                                maxWidth: { type: 'spring', stiffness: 280, damping: 26, mass: 0.8 },
+                                height: { duration: 0.26, ease: [0.16, 1, 0.3, 1] },
                               }}
-                              style={{ willChange: 'transform, opacity, width, height', transform: 'translateZ(0)' }}
+                              style={{ willChange: 'transform, opacity, max-width, height', transform: 'translateZ(0)' }}
                               className="min-w-0 overflow-hidden"
                             >
-                              <div className="w-full sm:min-w-[90px]">
+                              <div className="w-full">
                                 <CustomPopoverDropdown
                                   label="Flute 1"
                                   compact={true}
@@ -1019,7 +1037,7 @@ export default function App() {
                           layout
                           key="layer-slot-mid"
                           transition={{
-                            layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                            layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                           }}
                           style={{ willChange: 'transform', transform: 'translateZ(0)' }}
                           className="flex-1 min-w-0"
@@ -1040,35 +1058,53 @@ export default function App() {
                         <AnimatePresence initial={false}>
                           {flute === 'CB/F' && (
                             <motion.div
-                              layout
                               key="layer-slot-flute2"
                               initial={
                                 isDesktop
-                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
+                                  ? { opacity: 0, scale: 0.9, flex: 0, maxWidth: 0 }
                                   : { opacity: 0, scale: 0.92, height: 0 }
                               }
                               animate={
                                 isDesktop
-                                  ? { opacity: 1, scale: 1, width: 'auto', flexGrow: 1, flexBasis: '0%' }
+                                  ? { opacity: 1, scale: 1, flex: 1, maxWidth: '100%' }
                                   : { opacity: 1, scale: 1, height: 'auto' }
                               }
                               exit={
                                 isDesktop
-                                  ? { opacity: 0, scale: 0.9, width: 0, flexGrow: 0, flexBasis: 0 }
-                                  : { opacity: 0, scale: 0.92, height: 0 }
+                                  ? {
+                                      opacity: 0,
+                                      scale: 0.88,
+                                      flex: 0,
+                                      maxWidth: 0,
+                                      transition: {
+                                        opacity: { duration: 0.16, ease: 'easeOut' },
+                                        scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                                        flex: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+                                        maxWidth: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+                                      },
+                                    }
+                                  : {
+                                      opacity: 0,
+                                      scale: 0.9,
+                                      height: 0,
+                                      transition: {
+                                        opacity: { duration: 0.16, ease: 'easeOut' },
+                                        scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+                                        height: { duration: 0.26, ease: [0.16, 1, 0.3, 1] },
+                                      },
+                                    }
                               }
                               transition={{
-                                opacity: { duration: 0.18, ease: 'easeInOut' },
-                                scale: { type: 'spring', stiffness: 320, damping: 24 },
-                                flexGrow: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
-                                width: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
-                                height: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
-                                layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                                opacity: { duration: 0.22, ease: 'easeOut' },
+                                scale: { type: 'spring', stiffness: 320, damping: 25 },
+                                flex: { type: 'spring', stiffness: 280, damping: 26, mass: 0.8 },
+                                maxWidth: { type: 'spring', stiffness: 280, damping: 26, mass: 0.8 },
+                                height: { duration: 0.26, ease: [0.16, 1, 0.3, 1] },
                               }}
-                              style={{ willChange: 'transform, opacity, width, height', transform: 'translateZ(0)' }}
+                              style={{ willChange: 'transform, opacity, max-width, height', transform: 'translateZ(0)' }}
                               className="min-w-0 overflow-hidden"
                             >
-                              <div className="w-full sm:min-w-[90px]">
+                              <div className="w-full">
                                 <CustomPopoverDropdown
                                   label="Flute 2"
                                   compact={true}
@@ -1089,7 +1125,7 @@ export default function App() {
                           layout
                           key="layer-slot-bot"
                           transition={{
-                            layout: { type: 'spring', stiffness: 280, damping: 25, mass: 0.8 },
+                            layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                           }}
                           style={{ willChange: 'transform', transform: 'translateZ(0)' }}
                           className="flex-1 min-w-0"
