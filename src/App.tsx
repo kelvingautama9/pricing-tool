@@ -31,6 +31,7 @@ import {
   SidebarTabMode,
 } from './components/SidebarHistory';
 import { MasterTableAndTests } from './components/MasterTableAndTests';
+import { BatchCalculator } from './components/BatchCalculator';
 import { AIChatWorkspace } from './components/AIChatWorkspace';
 import {
   ChatThread,
@@ -149,7 +150,7 @@ export default function App() {
   }, [isDarkMode]);
 
   // Navigation & Sidebar states (Desktop Hide-Show + Mobile Drawer)
-  const [activeTab, setActiveTab] = useState<'calculator' | 'master' | 'tests' | 'ai'>('calculator');
+  const [activeTab, setActiveTab] = useState<'calculator' | 'batch' | 'master' | 'ai'>('calculator');
   const [sidebarMode, setSidebarMode] = useState<SidebarTabMode>('history');
   const [isSidebarOpenDesktop, setIsSidebarOpenDesktop] = useState(true);
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
@@ -158,12 +159,10 @@ export default function App() {
   useEffect(() => {
     if (activeTab === 'ai') {
       setSidebarMode('ai');
-    } else if (activeTab === 'calculator') {
+    } else if (activeTab === 'calculator' || activeTab === 'batch') {
       setSidebarMode((prev) => (prev === 'ai' ? 'history' : prev));
     } else if (activeTab === 'master') {
       setSidebarMode('customers');
-    } else if (activeTab === 'tests') {
-      setSidebarMode('history');
     }
   }, [activeTab]);
 
@@ -765,7 +764,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Zone 2: Clean Navigation Links (Kalkulator | Database | Testing | AI) */}
+          {/* Zone 2: Clean Navigation Links (Kalkulator | Multi Item | Database | AI) */}
           <nav className="flex items-center justify-center gap-3 sm:gap-6 text-[11px] sm:text-xs font-medium min-w-0 overflow-x-auto no-scrollbar">
             <button
               type="button"
@@ -780,6 +779,17 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab('batch')}
+              className={`py-1 transition-colors whitespace-nowrap cursor-pointer ${
+                activeTab === 'batch'
+                  ? 'text-[#C65D3B] font-semibold underline underline-offset-8 decoration-2'
+                  : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
+              }`}
+            >
+              Multi Item
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab('master')}
               className={`py-1 transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === 'master'
@@ -788,17 +798,6 @@ export default function App() {
               }`}
             >
               Database
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('tests')}
-              className={`py-1 transition-colors whitespace-nowrap cursor-pointer ${
-                activeTab === 'tests'
-                  ? 'text-[#C65D3B] font-semibold underline underline-offset-8 decoration-2'
-                  : 'text-neutral-500 hover:text-[#1C1B1A] dark:hover:text-white'
-              }`}
-            >
-              Testing
             </button>
             <button
               type="button"
@@ -888,9 +887,13 @@ export default function App() {
                   setActiveTab('calculator');
                 }}
               />
-            ) : activeTab !== 'calculator' ? (
+            ) : activeTab === 'batch' ? (
+              <BatchCalculator
+                onOpenInSingleCalculator={handleLoadPresetInput}
+              />
+            ) : activeTab === 'master' ? (
               <MasterTableAndTests
-                activeTab={activeTab}
+                activeTab="master"
                 currentReferenceSubstance={calculationResult.mappedReferenceSubstance}
                 onLoadPresetInput={handleLoadPresetInput}
               />

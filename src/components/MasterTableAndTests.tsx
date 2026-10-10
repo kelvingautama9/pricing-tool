@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BASE_PRICE_TABLE,
   VALIDATED_TEST_CASES,
@@ -11,7 +11,7 @@ import {
 import { CheckCircle2, Play, ShieldCheck } from 'lucide-react';
 
 interface MasterTableAndTestsProps {
-  activeTab: 'calculator' | 'master' | 'tests';
+  activeTab: 'calculator' | 'master' | 'tests' | string;
   currentReferenceSubstance?: string;
   onLoadPresetInput: (input: PricingInput, title: string) => void;
 }
@@ -21,6 +21,159 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
   currentReferenceSubstance,
   onLoadPresetInput,
 }) => {
+  const [showTests, setShowTests] = useState(false);
+
+  const renderTestsSection = () => {
+    const passedCount = VALIDATED_TEST_CASES.filter((tc) => {
+      const liveCalc = calculateCartonPricing(tc.input);
+      const m2Match = liveCalc.success && liveCalc.hargaBersihPerM2 === tc.expectedResultRp;
+      const pcsMatch =
+        liveCalc.hargaPerSheetRp !== undefined &&
+        Math.abs(liveCalc.hargaPerSheetRp - tc.expectedSheetRp) < 0.005;
+      return m2Match && pcsMatch;
+    }).length;
+
+    return (
+      <div className="space-y-3 sm:space-y-4 pt-2">
+        {/* Header Strip with responsive count badge */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-black/8 dark:border-white/10">
+          <div>
+            <h3 className="text-xs sm:text-sm font-display font-bold tracking-tight text-[#1C1B1A] dark:text-[#F2EFE9]">
+              Daftar Kasus Uji Validasi (SSOT Blueprint Test Suite)
+            </h3>
+            <p className="text-[9.5px] sm:text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5 leading-snug">
+              Verifikasi 3 skenario ekstrem System Blueprint (DW 5-Layer CB/F, Multiplier E/F + 275, Virtual Base M135).
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xs bg-emerald-600/10 border border-emerald-600/25 text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400 self-start sm:self-auto shrink-0 font-mono">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>
+              {passedCount} / {VALIDATED_TEST_CASES.length} Test Lulus (100%)
+            </span>
+          </div>
+        </div>
+
+        {/* Test Cards List */}
+        <div className="space-y-2 sm:space-y-2.5">
+          {VALIDATED_TEST_CASES.map((tc) => {
+            const liveCalc = calculateCartonPricing(tc.input);
+            const isPass =
+              liveCalc.success &&
+              liveCalc.hargaBersihPerM2 === tc.expectedResultRp &&
+              liveCalc.hargaPerSheetRp !== undefined &&
+              Math.abs(liveCalc.hargaPerSheetRp - tc.expectedSheetRp) < 0.005;
+
+            const modSign = liveCalc.totalAdditiveModifierPercent > 0 ? '+' : '';
+
+            return (
+              <div
+                key={tc.id}
+                className="p-2.5 sm:p-3.5 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-2 sm:gap-3.5 hover:border-black/15 dark:hover:border-white/15 transition-colors shadow-2xs"
+              >
+                <div className="space-y-1.5 sm:space-y-2 flex-1 min-w-0">
+                  <div className="flex items-start sm:items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <CheckCircle2
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          isPass
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      />
+                      <h4 className="text-[11px] sm:text-xs font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9] leading-tight truncate">
+                        {tc.title}
+                      </h4>
+                    </div>
+                    <span className="shrink-0 px-1.5 py-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] font-mono text-[8.5px] sm:text-[10px] font-semibold text-[#C65D3B]">
+                      {liveCalc.inputSubstanceString} · {tc.input.flute}
+                    </span>
+                  </div>
+
+                  <p className="text-[9.5px] sm:text-[11px] text-neutral-500 dark:text-neutral-400 leading-snug">
+                    {tc.description}
+                  </p>
+
+                  {/* Structured Micro-Metric Strip */}
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 pt-0.5 font-mono text-[8.5px] sm:text-[10px] tabular-nums">
+                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
+                        Acuan
+                      </span>
+                      <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] truncate block">
+                        {formatRupiah(liveCalc.basePrice)}
+                      </span>
+                    </div>
+                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
+                        Virtual Base
+                      </span>
+                      <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] truncate block">
+                        {formatRupiah(liveCalc.virtualBase)}
+                      </span>
+                    </div>
+                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
+                        Margin
+                      </span>
+                      <span className="font-semibold text-[#C65D3B] truncate block">
+                        +{tc.input.marginPercent}%
+                      </span>
+                    </div>
+                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
+                        Multiplier
+                      </span>
+                      <span className="font-semibold text-neutral-600 dark:text-neutral-300 truncate block">
+                        +{liveCalc.totalMultiplierPercent}%
+                      </span>
+                    </div>
+                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
+                        Downgrade
+                      </span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400 truncate block">
+                        -{liveCalc.totalDowngradePercent}%
+                      </span>
+                    </div>
+                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
+                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
+                        Modifier
+                      </span>
+                      <span className="font-semibold text-[#C65D3B] truncate block">
+                        {modSign}
+                        {liveCalc.totalAdditiveModifierPercent}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between lg:justify-end gap-2 pt-1.5 sm:pt-2 lg:pt-0 border-t lg:border-t-0 border-black/6 dark:border-white/8 shrink-0">
+                  <div className="text-left lg:text-right font-mono tabular-nums leading-tight">
+                    <div className="text-[8px] sm:text-[9.5px] text-neutral-400 dark:text-neutral-500">
+                      M²: {formatRupiah(liveCalc.hargaBersihPerM2)}
+                    </div>
+                    <div className="text-[11px] sm:text-sm font-bold text-[#C65D3B] mt-0.5">
+                      Pcs: {formatRupiah(liveCalc.hargaPerSheetRp ?? liveCalc.hargaBersihPerM2)}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onLoadPresetInput(tc.input, tc.title)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-[10px] font-semibold transition-colors duration-150 active:scale-[0.98] cursor-pointer shrink-0 shadow-2xs"
+                  >
+                    <Play className="w-3 h-3" />
+                    <span>Muat Spek</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   if (activeTab === 'master') {
     return (
       <div className="space-y-4 sm:space-y-5">
@@ -253,159 +406,45 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
             </ul>
           </div>
         </div>
+
+        {/* ========================================================= */}
+        {/* Toggle Section: Validated Unit Tests (Default: Hide)      */}
+        {/* ========================================================= */}
+        <div className="pt-3 border-t border-black/8 dark:border-white/10 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-md bg-emerald-600/10 text-emerald-600 shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9]">
+                  02. Validated Unit Tests (SSOT Architecture)
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-neutral-400 dark:text-neutral-500">
+                  Verifikasi 3 skenario ekstrem System Blueprint (DW 5-Layer CB/F, Multiplier E/F + 275, Virtual Base M135).
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTests((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-[#1C1B1A]/6 dark:bg-white/8 hover:bg-[#1C1B1A]/10 dark:hover:bg-white/12 text-[#1C1B1A] dark:text-[#F2EFE9] border border-black/8 dark:border-white/10 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{showTests ? 'Sembunyikan Unit Tests' : 'Tampilkan Unit Tests'}</span>
+            </button>
+          </div>
+
+          {showTests && renderTestsSection()}
+        </div>
       </div>
     );
   }
 
+  // Fallback if accessed via direct tests tab
   if (activeTab === 'tests') {
-    const passedCount = VALIDATED_TEST_CASES.filter((tc) => {
-      const liveCalc = calculateCartonPricing(tc.input);
-      const m2Match = liveCalc.success && liveCalc.hargaBersihPerM2 === tc.expectedResultRp;
-      const pcsMatch =
-        liveCalc.hargaPerSheetRp !== undefined &&
-        Math.abs(liveCalc.hargaPerSheetRp - tc.expectedSheetRp) < 0.005;
-      return m2Match && pcsMatch;
-    }).length;
-
-    return (
-      <div className="space-y-3 sm:space-y-4">
-        {/* Header Strip with responsive count badge */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 sm:pb-3 border-b border-black/8 dark:border-white/10">
-          <div>
-            <h2 className="text-xs sm:text-base font-display font-bold tracking-tight text-[#1C1B1A] dark:text-[#F2EFE9]">
-              02. Validated Unit Tests (The Additive Architecture SSOT)
-            </h2>
-            <p className="text-[9.5px] sm:text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5 leading-snug">
-              Verifikasi 3 skenario ekstrem System Blueprint (DW 5-Layer CB/F, Multiplier E/F + 275, Virtual Base M135).
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xs bg-emerald-600/10 border border-emerald-600/25 text-[9px] sm:text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400 self-start sm:self-auto shrink-0 font-mono">
-            <ShieldCheck className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-emerald-600 shrink-0" />
-            <span>
-              {passedCount} / {VALIDATED_TEST_CASES.length} Test Lulus (100%)
-            </span>
-          </div>
-        </div>
-
-        {/* Test Cards List */}
-        <div className="space-y-2 sm:space-y-2.5">
-          {VALIDATED_TEST_CASES.map((tc) => {
-            const liveCalc = calculateCartonPricing(tc.input);
-            const isPass =
-              liveCalc.success &&
-              liveCalc.hargaBersihPerM2 === tc.expectedResultRp &&
-              liveCalc.hargaPerSheetRp !== undefined &&
-              Math.abs(liveCalc.hargaPerSheetRp - tc.expectedSheetRp) < 0.005;
-
-            const modSign = liveCalc.totalAdditiveModifierPercent > 0 ? '+' : '';
-
-            return (
-              <div
-                key={tc.id}
-                className="p-2.5 sm:p-3.5 rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/8 dark:border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-2 sm:gap-3.5 hover:border-black/15 dark:hover:border-white/15 transition-colors shadow-2xs"
-              >
-                <div className="space-y-1.5 sm:space-y-2 flex-1 min-w-0">
-                  <div className="flex items-start sm:items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <CheckCircle2
-                        className={`w-3.5 h-3.5 shrink-0 ${
-                          isPass
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-rose-600 dark:text-rose-400'
-                        }`}
-                      />
-                      <h3 className="text-[11px] sm:text-xs font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9] leading-tight truncate">
-                        {tc.title}
-                      </h3>
-                    </div>
-                    <span className="shrink-0 px-1.5 py-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] font-mono text-[8.5px] sm:text-[10px] font-semibold text-[#C65D3B]">
-                      {liveCalc.inputSubstanceString} · {tc.input.flute}
-                    </span>
-                  </div>
-
-                  <p className="text-[9.5px] sm:text-[11px] text-neutral-500 dark:text-neutral-400 leading-snug">
-                    {tc.description}
-                  </p>
-
-                  {/* Structured Micro-Metric Strip: Responsive 3-cols mobile, 6-cols desktop */}
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 sm:gap-1.5 pt-0.5 font-mono text-[8.5px] sm:text-[10px] tabular-nums">
-                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
-                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
-                        Acuan
-                      </span>
-                      <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] truncate block">
-                        {formatRupiah(liveCalc.basePrice)}
-                      </span>
-                    </div>
-                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
-                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
-                        Virtual Base
-                      </span>
-                      <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] truncate block">
-                        {formatRupiah(liveCalc.virtualBase)}
-                      </span>
-                    </div>
-                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
-                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
-                        Margin
-                      </span>
-                      <span className="font-semibold text-[#C65D3B] truncate block">
-                        +{tc.input.marginPercent}%
-                      </span>
-                    </div>
-                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
-                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
-                        Multiplier
-                      </span>
-                      <span className="font-semibold text-neutral-600 dark:text-neutral-300 truncate block">
-                        +{liveCalc.totalMultiplierPercent}%
-                      </span>
-                    </div>
-                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
-                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
-                        Downgrade
-                      </span>
-                      <span className="font-semibold text-emerald-600 dark:text-emerald-400 truncate block">
-                        -{liveCalc.totalDowngradePercent}%
-                      </span>
-                    </div>
-                    <div className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/5 dark:border-white/5">
-                      <span className="block text-[7.5px] sm:text-[8.5px] text-neutral-400 truncate">
-                        Modifier
-                      </span>
-                      <span className="font-semibold text-[#C65D3B] truncate block">
-                        {modSign}
-                        {liveCalc.totalAdditiveModifierPercent}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between lg:justify-end gap-2 pt-1.5 sm:pt-2 lg:pt-0 border-t lg:border-t-0 border-black/6 dark:border-white/8 shrink-0">
-                  <div className="text-left lg:text-right font-mono tabular-nums leading-tight">
-                    <div className="text-[8px] sm:text-[9.5px] text-neutral-400 dark:text-neutral-500">
-                      M²: {formatRupiah(liveCalc.hargaBersihPerM2)} <span className="hidden sm:inline">(Mentah: {liveCalc.hargaFinalMentah.toFixed(2)})</span>
-                    </div>
-                    <div className="text-[11px] sm:text-sm font-bold text-[#C65D3B] mt-0.5">
-                      Pcs: {formatRupiah(liveCalc.hargaPerSheetRp ?? liveCalc.hargaBersihPerM2)}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => onLoadPresetInput(tc.input, tc.title)}
-                    className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-[9.5px] sm:text-[10.5px] font-semibold transition-colors duration-150 active:scale-[0.98] cursor-pointer shrink-0 shadow-2xs"
-                  >
-                    <Play className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    <span>Muat Spek</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    return renderTestsSection();
   }
 
   return null;
