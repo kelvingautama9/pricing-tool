@@ -28,6 +28,10 @@ import {
   FileSpreadsheet,
   RefreshCw,
   ArrowDown,
+  Server,
+  Cpu,
+  HardDrive,
+  Download,
 } from 'lucide-react';
 import {
   AI_MODELS,
@@ -45,6 +49,11 @@ import {
   roleToMarkdown,
   extractCodeArtifact,
   DetectedArtifact,
+  detectLocalModels,
+  loadLocalModel,
+  pullLocalModel,
+  DetectedLocalModel,
+  formatModelBytes,
 } from '../utils/aiEngine';
 import {
   estimateTokens,
@@ -132,6 +141,20 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const [useDeepReasoning, setUseDeepReasoning] = useState<boolean>(false);
   const [useCanvasMode, setUseCanvasMode] = useState<boolean>(false);
 
+  // Local Model Detection & Auto-Load State
+  const [isDetectingModels, setIsDetectingModels] = useState<boolean>(false);
+  const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
+  const [isLoadingLocalModel, setIsLoadingLocalModel] = useState<boolean>(false);
+  const [loadingLocalModelId, setLoadingLocalModelId] = useState<string | null>(null);
+  const [modelLoadBanner, setModelLoadBanner] = useState<{
+    active: boolean;
+    message: string;
+    isError?: boolean;
+  }>({ active: false, message: '' });
+  const [isPullingModel, setIsPullingModel] = useState<boolean>(false);
+  const [pullModelInput, setPullModelInput] = useState<string>('');
+  const [pullModelStatus, setPullModelStatus] = useState<string>('');
+
   // 4. Input, Attachments, Plus Menu & Camera State
   const [inputText, setInputText] = useState<string>('');
   const [attachedImages, setAttachedImages] = useState<ChatImageAttachment[]>([]);
@@ -182,10 +205,262 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
     }
   }, [serverConfig]);
 
+  // Gabungkan model statis dengan seluruh model lokal yang terdeteksi
+  const allAvailableModels = useMemo<AIModelOption[]>(() => {
+    const nonLocal = AI_MODELS.filter((m) => m.provider !== 'local');
+    const localDetected = (serverConfig.detectedLocalModels || []).map((dm) => ({
+      id: dm.id,
+      name: dm.name || dm.id,
+      provider: 'local' as const,
+      badge: dm.isLoaded
+        ? '🟢 VRAM Aktif'
+        : dm.parameterSize
+        ? `${dm.parameterSize} · Di Disk`
+        : 'Local Server',
+      description: `${dm.parameterSize ? dm.parameterSize + ' · ' : ''}${
+        dm.quantization ? dm.quantization + ' · ' : ''
+      }${dm.sizeFormatted ? '(' + dm.sizeFormatted + ')' : ''} via ${
+        serverConfig.localEndpoint
+      }`,
+      isLoaded: dm.isLoaded,
+      sizeFormatted: dm.sizeFormatted,
+      parameterSize: dm.parameterSize,
+      quantization: dm.quantization,
+      family: dm.family,
+    }));
+
+    if (localDetected.length > 0) {
+      return [...nonLocal, ...localDetected];
+    }
+
+    return [
+      ...nonLocal,
+      {
+        id: 'local-model',
+        name: 'LM Studio / Ollama Local',
+        provider: 'local',
+        badge: 'Local Server',
+        description: `Eksekusi offline via ${serverConfig.localEndpoint}`,
+      },
+    ];
+  }, [serverConfig.detectedLocalModels, serverConfig.localEndpoint]);
+
   const activeModelObj: AIModelOption =
-    AI_MODELS.find((m) => m.id === selectedModelId) || AI_MODELS[0];
+    allAvailableModels.find((m) => m.id === selectedModelId) ||
+    allAvailableModels[0];
   const activeRoleObj: Role =
     roles.find((r) => r.id === activeRoleId) || roles[0] || BUILT_IN_ROLES[0];
+
+  // Handler: Deteksi model dari server lokal (Ollama / LM Studio)
+  const handleDetectLocalModels = async (endpointToTest?: string) => {
+    const targetEndpoint =
+      endpointToTest || serverConfig.localEndpoint || 'http://localhost:1234';
+    setIsDetectingModels(true);
+    setDetectionStatus('Memindai server dan mendeteksi model...');
+    try {
+      const result = await detectLocalModels(targetEndpoint);
+      if (result.connected && result.models.length > 0) {
+        setServerConfig((prev) => ({
+          ...prev,
+          localEndpoint: targetEndpoint,
+          detectedLocalModels: result.models,
+          lastDetectedAt: Date.now(),
+          lastServerType: result.serverType,
+        }));
+        setDetectionStatus(
+          `Terhubung ke ${result.serverType.toUpperCase()} (${result.models.length} model terdeteksi, ${
+            result.loadedModelIds.length
+          } aktif di VRAM · ${result.latencyMs || 0}ms)`
+        );
+
+        if (providerTab === 'local' || selectedModelId === 'local-model') {
+          const preferred =
+            result.models.find((m) => m.isLoaded) || result.models[0];
+          if (preferred) {
+            setSelectedModelId(preferred.id);
+          }
+        }
+      } else if (result.connected) {
+        setDetectionStatus(
+          `Terhubung ke ${result.serverType.toUpperCase()}, namun belum ada model yang terpasang di server.`
+        );
+        setServerConfig((prev) => ({
+          ...prev,
+          localEndpoint: targetEndpoint,
+          detectedLocalModels: [],
+          lastDetectedAt: Date.now(),
+          lastServerType: result.serverType,
+        }));
+      } else {
+        setDetectionStatus(
+          result.error ||
+            `Server lokal tidak merespons di ${targetEndpoint}. Pastikan aplikasi sudah berjalan.`
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setDetectionStatus(`Gagal mendeteksi: ${msg}`);
+    } finally {
+      setIsDetectingModels(false);
+    }
+  };
+
+  // Handler: Pilih model (dengan auto-load otomatis ke VRAM jika model lokal belum aktif)
+  const handleSelectModel = async (model: AIModelOption) => {
+    triggerHaptic('light');
+    setSelectedModelId(model.id);
+
+    if (model.provider === 'local') {
+      const autoLoad = serverConfig.autoLoadOnSelect !== false; // default true
+      const localModel = serverConfig.detectedLocalModels?.find(
+        (m) => m.id === model.id
+      );
+
+      // Jika auto-load aktif dan model belum aktif di VRAM
+      if (autoLoad && localModel && !localModel.isLoaded) {
+        setIsLoadingLocalModel(true);
+        setLoadingLocalModelId(model.id);
+        setModelLoadBanner({
+          active: true,
+          message: `Sedang memuat ${model.id} ke VRAM server lokal...`,
+          isError: false,
+        });
+
+        try {
+          const res = await loadLocalModel(
+            serverConfig.localEndpoint,
+            model.id
+          );
+          if (res.success) {
+            setServerConfig((prev) => ({
+              ...prev,
+              detectedLocalModels: (prev.detectedLocalModels || []).map((m) =>
+                m.id === model.id
+                  ? { ...m, isLoaded: true, badge: '🟢 VRAM Aktif' }
+                  : m
+              ),
+            }));
+            setModelLoadBanner({
+              active: true,
+              message: `Model ${model.id} berhasil dimuat ke VRAM! Siap inferensi.`,
+              isError: false,
+            });
+            setTimeout(() => {
+              setModelLoadBanner((prev) =>
+                prev.message.includes('berhasil')
+                  ? { active: false, message: '' }
+                  : prev
+              );
+            }, 3500);
+          } else {
+            setModelLoadBanner({
+              active: true,
+              message: `Peringatan: ${res.message || 'Gagal memuat model'}`,
+              isError: true,
+            });
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setModelLoadBanner({
+            active: true,
+            message: `Gagal memuat ${model.id}: ${msg}`,
+            isError: true,
+          });
+        } finally {
+          setIsLoadingLocalModel(false);
+          setLoadingLocalModelId(null);
+        }
+      }
+    }
+  };
+
+  // Handler: Muat model tertentu secara manual
+  const handleLoadSpecificModel = async (modelId: string) => {
+    setIsLoadingLocalModel(true);
+    setLoadingLocalModelId(modelId);
+    setModelLoadBanner({
+      active: true,
+      message: `Sedang memuat ${modelId} ke VRAM server lokal...`,
+      isError: false,
+    });
+
+    try {
+      const res = await loadLocalModel(serverConfig.localEndpoint, modelId);
+      if (res.success) {
+        setServerConfig((prev) => ({
+          ...prev,
+          detectedLocalModels: (prev.detectedLocalModels || []).map((m) =>
+            m.id === modelId
+              ? { ...m, isLoaded: true, badge: '🟢 VRAM Aktif' }
+              : m
+          ),
+        }));
+        setModelLoadBanner({
+          active: true,
+          message: `Model ${modelId} berhasil dimuat ke VRAM!`,
+          isError: false,
+        });
+        setTimeout(() => {
+          setModelLoadBanner((prev) =>
+            prev.message.includes('berhasil')
+              ? { active: false, message: '' }
+              : prev
+          );
+        }, 3500);
+      } else {
+        setModelLoadBanner({
+          active: true,
+          message: `Peringatan: ${res.message}`,
+          isError: true,
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setModelLoadBanner({
+        active: true,
+        message: `Gagal memuat ${modelId}: ${msg}`,
+        isError: true,
+      });
+    } finally {
+      setIsLoadingLocalModel(false);
+      setLoadingLocalModelId(null);
+    }
+  };
+
+  // Handler: Tarik (pull) model baru di server Ollama
+  const handlePullModel = async () => {
+    if (!pullModelInput.trim()) return;
+    const modelToPull = pullModelInput.trim();
+    setIsPullingModel(true);
+    setPullModelStatus(`Sedang menarik model "${modelToPull}" ke Ollama... Mohon tunggu.`);
+    try {
+      const res = await pullLocalModel(serverConfig.localEndpoint, modelToPull);
+      if (res.success) {
+        setPullModelStatus(`Model "${modelToPull}" berhasil ditarik!`);
+        setPullModelInput('');
+        await handleDetectLocalModels();
+      } else {
+        setPullModelStatus(`Gagal menarik model: ${res.message}`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPullModelStatus(`Error: ${msg}`);
+    } finally {
+      setIsPullingModel(false);
+    }
+  };
+
+  // Auto-detect model lokal saat tab 'local' dibuka pertama kali jika belum ada model tersimpan
+  useEffect(() => {
+    if (
+      providerTab === 'local' &&
+      (!serverConfig.detectedLocalModels ||
+        serverConfig.detectedLocalModels.length === 0) &&
+      !isDetectingModels
+    ) {
+      handleDetectLocalModels();
+    }
+  }, [providerTab]);
 
   // Snapshot of the active calculator state for zero-hallucination grounding
   const calculatorSnapshot = useMemo(() => {
@@ -628,7 +903,7 @@ ${masterTableRows}`;
 
     const targetModelId = overrideModelId || selectedModelId;
     const targetModelObj =
-      AI_MODELS.find((m) => m.id === targetModelId) || activeModelObj;
+      allAvailableModels.find((m) => m.id === targetModelId) || activeModelObj;
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -1209,62 +1484,118 @@ ${masterTableRows}`;
                       ))}
                     </div>
 
-                    {/* Header Row: DAFTAR MODEL TERSEDIA + Atur Server link */}
+                    {/* Header Row: DAFTAR MODEL TERSEDIA + Pindai & Atur Server */}
                     <div className="flex items-center justify-between px-1 pb-1.5 text-[10px] font-display font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                      <span>Daftar Model Tersedia:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setModelPopoverOpen(false);
-                          setServerModalOpen(true);
-                        }}
-                        className="font-sans font-semibold normal-case tracking-normal text-[#C65D3B] hover:underline cursor-pointer"
-                      >
-                        Atur Server
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <span>Daftar Model:</span>
+                        {providerTab === 'local' && serverConfig.lastServerType && (
+                          <span className="px-1.5 py-0.2 rounded-xs bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 font-mono text-[9px] lowercase font-normal">
+                            {serverConfig.lastServerType}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {providerTab === 'local' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDetectLocalModels();
+                            }}
+                            disabled={isDetectingModels}
+                            title="Pindai ulang model dari server lokal"
+                            className="font-sans font-semibold normal-case tracking-normal text-neutral-500 hover:text-[#C65D3B] flex items-center gap-1 cursor-pointer"
+                          >
+                            <RefreshCw
+                              className={`w-2.5 h-2.5 ${
+                                isDetectingModels ? 'animate-spin text-[#C65D3B]' : ''
+                              }`}
+                            />
+                            <span>{isDetectingModels ? 'Memindai...' : 'Pindai'}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModelPopoverOpen(false);
+                            setServerModalOpen(true);
+                          }}
+                          className="font-sans font-semibold normal-case tracking-normal text-[#C65D3B] hover:underline cursor-pointer"
+                        >
+                          Atur Server
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
-                      {AI_MODELS.filter((m) => m.provider === providerTab).map(
-                        (m) => {
-                          const isSelected = m.id === selectedModelId;
-                          return (
-                            <button
-                              key={m.id}
-                              type="button"
-                              onClick={() => {
-                                triggerHaptic('light');
-                                setSelectedModelId(m.id);
-                                setModelPopoverOpen(false);
-                              }}
-                              className={`w-full text-left px-2.5 py-2 rounded-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
-                                isSelected
-                                  ? 'bg-[#C65D3B]/12 border border-[#C65D3B]/35'
-                                  : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
-                              }`}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`font-mono text-[11.5px] ${
-                                      isSelected
-                                        ? 'font-bold text-[#C65D3B]'
-                                        : 'font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]'
-                                    }`}
-                                  >
-                                    {m.name}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded-xs bg-[#C65D3B]/12 text-[9.5px] font-mono text-[#C65D3B] font-semibold">
-                                    {m.badge}
-                                  </span>
+                      {allAvailableModels.filter((m) => m.provider === providerTab).length === 0 ? (
+                        <div className="p-3 text-center rounded-xs bg-black/5 dark:bg-white/5 text-[11px] text-neutral-500 space-y-2">
+                          <p>Belum ada model lokal terdeteksi di {serverConfig.localEndpoint}.</p>
+                          <button
+                            type="button"
+                            onClick={() => handleDetectLocalModels()}
+                            className="px-2.5 py-1 rounded-xs bg-[#C65D3B] text-white text-[10.5px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isDetectingModels ? 'animate-spin' : ''}`} />
+                            <span>Pindai Model Server</span>
+                          </button>
+                        </div>
+                      ) : (
+                        allAvailableModels
+                          .filter((m) => m.provider === providerTab)
+                          .map((m) => {
+                            const isSelected = m.id === selectedModelId;
+                            const isLoadingThis =
+                              isLoadingLocalModel && loadingLocalModelId === m.id;
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  handleSelectModel(m);
+                                  setModelPopoverOpen(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-2 rounded-xs transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-[#C65D3B]/12 border border-[#C65D3B]/35'
+                                    : 'hover:bg-black/5 dark:hover:bg-white/5 border border-transparent'
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span
+                                      className={`font-mono text-[11.5px] truncate max-w-[190px] ${
+                                        isSelected
+                                          ? 'font-bold text-[#C65D3B]'
+                                          : 'font-semibold text-[#1C1B1A] dark:text-[#F2EFE9]'
+                                      }`}
+                                    >
+                                      {m.name}
+                                    </span>
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded-xs text-[9px] font-mono font-semibold shrink-0 ${
+                                        m.isLoaded
+                                          ? 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-400'
+                                          : 'bg-[#C65D3B]/12 text-[#C65D3B]'
+                                      }`}
+                                    >
+                                      {isLoadingThis ? 'Memuat ke VRAM...' : m.badge}
+                                    </span>
+                                  </div>
+                                  {m.description && (
+                                    <div className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate mt-0.5">
+                                      {m.description}
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                              {isSelected && (
-                                <Check className="w-3.5 h-3.5 text-[#C65D3B] shrink-0" />
-                              )}
-                            </button>
-                          );
-                        }
+                                {isLoadingThis ? (
+                                  <RefreshCw className="w-3.5 h-3.5 text-[#C65D3B] animate-spin shrink-0" />
+                                ) : isSelected ? (
+                                  <Check className="w-3.5 h-3.5 text-[#C65D3B] shrink-0" />
+                                ) : null}
+                              </button>
+                            );
+                          })
                       )}
                     </div>
                   </div>
@@ -1515,6 +1846,35 @@ ${masterTableRows}`;
             >
               <ArrowDown className="w-3 h-3 text-[#C65D3B]" />
               <span>{isStreaming ? 'Ikuti Jawaban Live' : 'Ke Bawah'}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Model Load to VRAM Live Status Banner */}
+        {modelLoadBanner.active && (
+          <div
+            className={`mx-3 mb-2 p-2.5 rounded-md flex items-center justify-between gap-2 text-xs transition-all ${
+              modelLoadBanner.isError
+                ? 'bg-rose-500/12 border border-rose-600/35 text-rose-800 dark:text-rose-300'
+                : 'bg-emerald-500/12 border border-emerald-600/35 text-emerald-800 dark:text-emerald-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {isLoadingLocalModel ? (
+                <RefreshCw className="w-3.5 h-3.5 shrink-0 text-emerald-600 animate-spin" />
+              ) : modelLoadBanner.isError ? (
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+              ) : (
+                <Check className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+              )}
+              <span className="text-[11px] font-medium">{modelLoadBanner.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setModelLoadBanner({ active: false, message: '' })}
+              className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer p-0.5"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -2402,26 +2762,277 @@ ${masterTableRows}`;
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-medium mb-1">
-                    Endpoint Local LM Studio / Ollama / Cloudflare Tunnel
-                  </label>
-                  <input
-                    type="text"
-                    value={serverConfig.localEndpoint}
-                    onChange={(e) =>
-                      setServerConfig((prev) => ({
-                        ...prev,
-                        localEndpoint: e.target.value,
-                      }))
-                    }
-                    placeholder="http://localhost:1234"
-                    className="w-full px-2.5 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 font-mono text-[11px]"
-                  />
+              <div className="space-y-3.5">
+                {/* 1. Endpoint & Server Connection Presets */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-medium text-[#1C1B1A] dark:text-[#F2EFE9]">
+                      Endpoint Server AI Lokal
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ep = 'http://localhost:1234';
+                          setServerConfig((prev) => ({ ...prev, localEndpoint: ep }));
+                          handleDetectLocalModels(ep);
+                        }}
+                        className="px-1.5 py-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/10 dark:hover:bg-white/10 text-[9.5px] font-mono text-neutral-600 dark:text-neutral-300 border border-black/8 dark:border-white/10 cursor-pointer"
+                        title="Preset port default LM Studio"
+                      >
+                        LM Studio (:1234)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ep = 'http://localhost:11434';
+                          setServerConfig((prev) => ({ ...prev, localEndpoint: ep }));
+                          handleDetectLocalModels(ep);
+                        }}
+                        className="px-1.5 py-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/10 dark:hover:bg-white/10 text-[9.5px] font-mono text-neutral-600 dark:text-neutral-300 border border-black/8 dark:border-white/10 cursor-pointer"
+                        title="Preset port default Ollama"
+                      >
+                        Ollama (:11434)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={serverConfig.localEndpoint}
+                      onChange={(e) =>
+                        setServerConfig((prev) => ({
+                          ...prev,
+                          localEndpoint: e.target.value,
+                        }))
+                      }
+                      placeholder="http://localhost:1234 atau http://localhost:11434"
+                      className="flex-1 px-2.5 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 font-mono text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleDetectLocalModels()}
+                      disabled={isDetectingModels}
+                      className="px-3 py-1.5 rounded-xs bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${
+                          isDetectingModels ? 'animate-spin' : ''
+                        }`}
+                      />
+                      <span>{isDetectingModels ? 'Memindai...' : 'Deteksi Model'}</span>
+                    </button>
+                  </div>
+
+                  {/* Status Banner Deteksi Server */}
+                  {detectionStatus && (
+                    <div
+                      className={`p-2 rounded-xs text-[10.5px] flex items-center justify-between gap-2 border ${
+                        detectionStatus.includes('Terhubung')
+                          ? 'bg-emerald-500/10 border-emerald-600/30 text-emerald-800 dark:text-emerald-300'
+                          : 'bg-amber-500/10 border-amber-600/30 text-amber-800 dark:text-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        {detectionStatus.includes('Terhubung') ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        )}
+                        <span className="truncate">{detectionStatus}</span>
+                      </div>
+                      {serverConfig.lastServerType && (
+                        <span className="font-mono text-[9px] uppercase px-1 rounded-xs bg-black/5 dark:bg-white/10 shrink-0">
+                          {serverConfig.lastServerType}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Local LM Exclusive Hardware & Context Parameters */}
+                {/* 2. Auto-Load Toggle Switch */}
+                <div className="p-2.5 rounded-md bg-[#F9F9F9] dark:bg-[#1d1c1a] border border-black/8 dark:border-white/10">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={serverConfig.autoLoadOnSelect !== false}
+                      onChange={(e) =>
+                        setServerConfig((prev) => ({
+                          ...prev,
+                          autoLoadOnSelect: e.target.checked,
+                        }))
+                      }
+                      className="mt-0.5 w-4 h-4 accent-[#C65D3B] rounded-xs cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] flex items-center gap-1.5">
+                        <span>Auto-Load Model saat Dipilih</span>
+                        <span className="px-1.5 py-0.2 rounded-xs bg-[#C65D3B]/10 text-[#C65D3B] font-mono text-[9px] font-bold">
+                          Rekomendasi
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400 leading-normal">
+                        Otomatis memuat bobot model ke VRAM/RAM server lokal ketika Anda memilih model yang belum aktif, sehingga langsung siap digunakan tanpa error 404/not-loaded.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* 3. Daftar Model Terdeteksi & Kontrol Load ke VRAM */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-medium">
+                    <span className="text-[#1C1B1A] dark:text-[#F2EFE9]">
+                      Daftar Model Server Lokal ({serverConfig.detectedLocalModels?.length || 0})
+                    </span>
+                    <span className="text-[10px] font-mono text-neutral-500">
+                      {(serverConfig.detectedLocalModels || []).filter((m) => m.isLoaded).length} Aktif di VRAM
+                    </span>
+                  </div>
+
+                  {(!serverConfig.detectedLocalModels ||
+                    serverConfig.detectedLocalModels.length === 0) ? (
+                    <div className="p-3 text-center rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/6 dark:border-white/8 text-[11px] text-neutral-500 space-y-1.5">
+                      <p>Belum ada model terdeteksi di server.</p>
+                      <p className="text-[10px] text-neutral-400">
+                        Pastikan LM Studio atau Ollama sedang berjalan, lalu klik <strong>Deteksi Model</strong> di atas.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-0.5">
+                      {serverConfig.detectedLocalModels.map((m) => {
+                        const isSelected = m.id === selectedModelId;
+                        const isCurrentlyLoading =
+                          isLoadingLocalModel && loadingLocalModelId === m.id;
+
+                        return (
+                          <div
+                            key={m.id}
+                            className={`p-2 rounded-xs border transition-colors flex items-center justify-between gap-2 ${
+                              isSelected
+                                ? 'bg-[#C65D3B]/8 border-[#C65D3B]/35'
+                                : 'bg-[#F9F9F9] dark:bg-[#1d1c1a] border-black/8 dark:border-white/10'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono text-[11px] font-bold text-[#1C1B1A] dark:text-[#F2EFE9] truncate max-w-[200px]">
+                                  {m.name}
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.2 rounded-xs text-[9px] font-mono font-semibold shrink-0 ${
+                                    m.isLoaded
+                                      ? 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 border border-emerald-600/30'
+                                      : 'bg-black/5 dark:bg-white/10 text-neutral-500'
+                                  }`}
+                                >
+                                  {m.isLoaded ? '🟢 Aktif di VRAM' : '⚪ Di Disk'}
+                                </span>
+                              </div>
+
+                              {/* Specs Chips: Parameter, Quant, Size */}
+                              <div className="flex items-center gap-1.5 text-[9.5px] font-mono text-neutral-500 dark:text-neutral-400 flex-wrap">
+                                {m.parameterSize && (
+                                  <span className="px-1 py-0.2 rounded-xs bg-black/5 dark:bg-white/5">
+                                    {m.parameterSize}
+                                  </span>
+                                )}
+                                {m.quantization && (
+                                  <span className="px-1 py-0.2 rounded-xs bg-black/5 dark:bg-white/5">
+                                    {m.quantization}
+                                  </span>
+                                )}
+                                {m.sizeFormatted && (
+                                  <span className="px-1 py-0.2 rounded-xs bg-black/5 dark:bg-white/5">
+                                    {m.sizeFormatted}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Action Buttons: Load ke VRAM / Pilih Model */}
+                            <div className="shrink-0 flex items-center gap-1">
+                              {m.isLoaded ? (
+                                isSelected ? (
+                                  <span className="px-2 py-1 rounded-xs bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
+                                    <Check className="w-3 h-3" />
+                                    <span>Aktif</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSelectModel(m)}
+                                    className="px-2 py-1 rounded-xs bg-black/6 dark:bg-white/8 hover:bg-[#C65D3B] hover:text-white text-[10px] font-semibold transition-colors cursor-pointer"
+                                  >
+                                    Pilih
+                                  </button>
+                                )
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLoadSpecificModel(m.id)}
+                                  disabled={isLoadingLocalModel}
+                                  className="px-2 py-1 rounded-xs bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-[10px] font-semibold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  {isCurrentlyLoading ? (
+                                    <>
+                                      <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                                      <span>Memuat...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Zap className="w-2.5 h-2.5" />
+                                      <span>Load ke VRAM</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Tarik Model Baru via Ollama Pull */}
+                <div className="space-y-1.5 pt-1 border-t border-black/8 dark:border-white/10">
+                  <label className="text-[11px] font-medium text-[#1C1B1A] dark:text-[#F2EFE9] flex items-center justify-between">
+                    <span>Tarik Model Baru (Ollama Pull)</span>
+                    <span className="text-[9.5px] font-mono text-neutral-400">Contoh: qwen2.5:3b, llama3.2:1b</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={pullModelInput}
+                      onChange={(e) => setPullModelInput(e.target.value)}
+                      placeholder="Nama model (misal: qwen2.5:3b atau deepseek-r1:8b)"
+                      className="flex-1 px-2.5 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 font-mono text-[11px]"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handlePullModel();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePullModel}
+                      disabled={isPullingModel || !pullModelInput.trim()}
+                      className="px-3 py-1.5 rounded-xs bg-neutral-800 dark:bg-neutral-200 text-white dark:text-neutral-900 text-[11px] font-semibold flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+                    >
+                      <Download className={`w-3.5 h-3.5 ${isPullingModel ? 'animate-bounce' : ''}`} />
+                      <span>{isPullingModel ? 'Menarik...' : 'Tarik'}</span>
+                    </button>
+                  </div>
+                  {pullModelStatus && (
+                    <div className="text-[10px] font-mono text-neutral-500 dark:text-neutral-400">
+                      {pullModelStatus}
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Local LM Hardware & Context Parameters */}
                 <div className="space-y-3 pt-2 border-t border-black/8 dark:border-white/10">
                   <div>
                     <div className="flex justify-between text-[11px] font-medium mb-1">
