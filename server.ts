@@ -53,7 +53,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '15mb' }));
+  app.use(express.json({ limit: '50mb' }));
 
   const resolveApiKey = () => {
     const raw =
@@ -486,6 +486,110 @@ async function startServer() {
     }
   });
 
+  // Endpoint: Parser Dokumen Universal Server-side (PDF, Word, Excel, CSV)
+  app.post('/api/parse-document', async (req, res) => {
+    try {
+      const { base64, filename = 'document', ext = 'pdf' } = req.body || {};
+      if (!base64) {
+        return res.status(400).json({ success: false, message: 'Data base64 tidak ada' });
+      }
+
+      const buffer = Buffer.from(base64, 'base64');
+      const cleanExt = String(ext).toLowerCase().replace(/^\./, '');
+
+      if (cleanExt === 'pdf') {
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const loadingTask = pdfjsLib.getDocument({
+          data: new Uint8Array(buffer),
+          useSystemFonts: true,
+          disableFontFace: true,
+        });
+        const pdf = await loadingTask.promise;
+        const pagesText: string[] = [];
+        const maxPages = Math.min(pdf.numPages, 40);
+
+        for (let i = 1; i <= maxPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageStr = textContent.items
+            .map((item: unknown) => {
+              if (item && typeof item === 'object' && 'str' in item) {
+                return String((item as { str: string }).str || '');
+              }
+              return '';
+            })
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (pageStr) {
+            pagesText.push(`[Halaman ${i}]\n${pageStr}`);
+          }
+        }
+
+        const fullText = pagesText.join('\n\n');
+        return res.json({
+          success: true,
+          text: fullText || `Dokumen PDF "${filename}" (${pdf.numPages} halaman) tidak mengandung teks terbaca.`,
+          summary: `${pdf.numPages} halaman PDF terbaca`,
+          meta: { pages: pdf.numPages },
+        });
+      }
+
+      if (cleanExt === 'docx') {
+        const mammothModule = await import('mammoth');
+        const mammoth = mammothModule.default || mammothModule;
+        const result = await mammoth.extractRawText({ buffer });
+        const text = (result.value || '').trim();
+        return res.json({
+          success: true,
+          text: text || `Dokumen Word "${filename}" kosong.`,
+          summary: `${text.length} karakter terbaca`,
+        });
+      }
+
+      if (cleanExt === 'xlsx' || cleanExt === 'xls' || cleanExt === 'csv') {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+        const summaries: string[] = [];
+        for (const sheetName of workbook.SheetNames.slice(0, 10)) {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) continue;
+          const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+          const nonEmpty = rows.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? '').trim() !== ''));
+          if (nonEmpty.length > 0) {
+            const rawHeader = nonEmpty[0] as unknown[];
+            const header = rawHeader.map((c, idx) => String(c ?? '').trim() || `Kolom_${idx + 1}`);
+            const sep = header.map(() => '---');
+            const body = nonEmpty.slice(1, 150).map((r) => {
+              const rowArr = r as unknown[];
+              const cols = header.map((_, idx) => String(rowArr[idx] ?? '').replace(/[\r\n]+/g, ' ').trim() || '-');
+              return `| ${cols.join(' | ')} |`;
+            });
+            summaries.push(`### Sheet: ${sheetName} (${nonEmpty.length} baris)\n| ${header.join(' | ')} |\n| ${sep.join(' | ')} |\n${body.join('\n')}`);
+          }
+        }
+        return res.json({
+          success: true,
+          text: summaries.join('\n\n') || `Spreadsheet "${filename}" kosong.`,
+          summary: `${workbook.SheetNames.length} sheet terbaca`,
+        });
+      }
+
+      const text = buffer.toString('utf-8').slice(0, 50000);
+      return res.json({
+        success: true,
+        text,
+        summary: `${text.length} karakter`,
+      });
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({
+        success: false,
+        message: `Gagal memproses dokumen di server: ${errMsg}`,
+      });
+    }
+  });
+
   // Endpoint: Proxy stream SSE untuk server lokal (mengatasi pembatasan Mixed Content & CORS di browser)
   app.post('/api/local/stream', async (req, res) => {
     const {
@@ -516,7 +620,7 @@ async function startServer() {
     };
 
     try {
-      const upstreamRes = await fetch(targetUrl, {
+      let upstreamRes = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -532,11 +636,63 @@ async function startServer() {
         }),
       });
 
+      // Smart Retry: Jika model lokal menolak format vision multimodal (misal model text-only), fallback ke plain text
+      if (upstreamRes.status === 400 && Array.isArray(messages)) {
+        const hasMultimodal = messages.some((m: unknown) => {
+          if (m && typeof m === 'object' && 'content' in m) {
+            return Array.isArray((m as { content: unknown }).content);
+          }
+          return false;
+        });
+
+        if (hasMultimodal) {
+          const downgradedMessages = messages.map((m: unknown) => {
+            if (m && typeof m === 'object') {
+              const msgObj = m as { role: string; content: unknown };
+              if (Array.isArray(msgObj.content)) {
+                const textParts = msgObj.content
+                  .filter((p: unknown) => p && typeof p === 'object' && (p as { type?: string }).type === 'text')
+                  .map((p: unknown) => (p as { text: string }).text)
+                  .join('\n');
+                const imgCount = msgObj.content.filter(
+                  (p: unknown) => p && typeof p === 'object' && (p as { type?: string }).type === 'image_url'
+                ).length;
+                return {
+                  role: msgObj.role,
+                  content: `${textParts}\n\n[Catatan: Pengguna melampirkan ${imgCount} gambar. Mode teks.]`,
+                };
+              }
+            }
+            return m;
+          });
+
+          upstreamRes = await fetch(targetUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...BROWSER_HEADERS,
+            },
+            body: JSON.stringify({
+              model,
+              messages: downgradedMessages,
+              temperature: Number(temperature),
+              top_p: Number(topP),
+              max_tokens: Number(maxTokens) || undefined,
+              stream: true,
+            }),
+          });
+        }
+      }
+
       if (!upstreamRes.ok || !upstreamRes.body) {
         const errText = await upstreamRes.text().catch(() => '');
+        let helpfulMsg = `Server lokal mengembalikan HTTP ${upstreamRes.status}: ${errText}`;
+        if (upstreamRes.status === 502) {
+          helpfulMsg = `Server lokal (${baseUrl}) mengembalikan HTTP 502 Bad Gateway. Pastikan LM Studio atau Ollama sedang aktif dan tunnel Cloudflare tersambung.`;
+        }
         sendEvent({
           type: 'error',
-          message: `Server lokal mengembalikan HTTP ${upstreamRes.status}: ${errText}`,
+          message: helpfulMsg,
         });
         res.end();
         return;

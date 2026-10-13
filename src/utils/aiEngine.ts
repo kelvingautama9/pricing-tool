@@ -304,6 +304,7 @@ export interface ChatFileAttachment {
   textContent?: string;
   base64Data?: string;
   mimeType?: string;
+  summary?: string;
 }
 
 export interface ChatMessage {
@@ -743,9 +744,14 @@ export function truncateMessagesByBudget(
 
   for (let i = rawMessages.length - 1; i >= 0; i--) {
     const msg = rawMessages[i];
-    const msgTok = estimateTokens(msg.content) + (msg.images?.length ? 300 : 0);
+    let fullText = msg.content || '';
+    if (msg.files?.length) {
+      fullText += msg.files.map((f) => f.textContent || '').join(' ');
+    }
+    const msgTok = estimateTokens(fullText) + (msg.images?.length ? 400 : 0);
 
-    if (currentTokens + msgTok > contextLimit && reversedTurns.length >= 2) {
+    // Pastikan turn terbaru (pesan terkini pengguna beserta file lampirannya) selalu disertakan
+    if (i !== rawMessages.length - 1 && currentTokens + msgTok > contextLimit && reversedTurns.length >= 1) {
       break;
     }
     currentTokens += msgTok;
@@ -783,15 +789,36 @@ export async function executeChatStream(
   );
 
   const formatMessageContentWithFiles = (m: ChatMessage): string => {
-    if (!m.files || m.files.length === 0) return m.content;
-    const fileBlocks = m.files
-      .filter((f) => f.textContent)
-      .map(
-        (f) =>
-          `\n\n[Attached File: ${f.name} (${f.sizeLabel})]\n\`\`\`${f.ext}\n${f.textContent}\n\`\`\``
-      )
-      .join('');
-    return `${m.content || 'Analisis file terlampir berikut:'}${fileBlocks}`;
+    let baseText = (m.content || '').trim();
+    const blocks: string[] = [];
+
+    if (m.images && m.images.length > 0) {
+      const imgInfo = m.images
+        .map((img, i) => `[Lampiran Foto #${i + 1}: ${img.name} (${img.mimeType})]`)
+        .join('\n');
+      blocks.push(imgInfo);
+    }
+
+    if (m.files && m.files.length > 0) {
+      for (const f of m.files) {
+        if (f.textContent && f.textContent.trim()) {
+          blocks.push(
+            `\n--- FILE TERLAMPIR: ${f.name} (${f.ext.toUpperCase()}, ${f.sizeLabel}) ---\n\`\`\`${f.ext}\n${f.textContent.trim()}\n\`\`\`\n--- AKHIR FILE ---`
+          );
+        } else {
+          blocks.push(`\n[File Terlampir: ${f.name} (${f.ext.toUpperCase()}, ${f.sizeLabel})]`);
+        }
+      }
+    }
+
+    if (blocks.length > 0) {
+      if (!baseText) {
+        baseText = 'Mohon analisis dokumen/file dan gambar terlampir berikut:';
+      }
+      return `${baseText}\n\n${blocks.join('\n\n')}`;
+    }
+
+    return baseText || 'Halo';
   };
 
   if (provider === 'gemini') {
@@ -1013,10 +1040,30 @@ export async function executeChatStream(
 
   const openAiMessages = [
     { role: 'system', content: effectiveSystemInstruction },
-    ...budgetedMessages.map((m) => ({
-      role: m.role,
-      content: formatMessageContentWithFiles(m),
-    })),
+    ...budgetedMessages.map((m) => {
+      const textContent = formatMessageContentWithFiles(m);
+      const hasImages = m.role === 'user' && m.images && m.images.length > 0;
+
+      if (hasImages) {
+        return {
+          role: m.role,
+          content: [
+            { type: 'text', text: textContent },
+            ...m.images!.map((img) => ({
+              type: 'image_url',
+              image_url: {
+                url: `data:${img.mimeType};base64,${img.data}`,
+              },
+            })),
+          ],
+        };
+      }
+
+      return {
+        role: m.role,
+        content: textContent,
+      };
+    }),
   ];
 
   // OpenRouter / Qwen Cloud with Server Proxy + Automatic 6-Model Fallback Chain

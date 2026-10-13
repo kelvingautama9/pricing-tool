@@ -32,7 +32,10 @@ import {
   Cpu,
   HardDrive,
   Download,
+  Mic,
+  MicOff,
 } from 'lucide-react';
+import { parseDocumentFile } from '../utils/documentParser';
 import {
   AI_MODELS,
   AIModelOption,
@@ -163,6 +166,13 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const [attachedFiles, setAttachedFiles] = useState<ChatFileAttachment[]>([]);
   const [plusMenuOpen, setPlusMenuOpen] = useState<boolean>(false);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+
+  // Voice to Text / Microphone State
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [voiceLang, setVoiceLang] = useState<'id-ID' | 'en-US'>('id-ID');
+  const [voiceInterim, setVoiceInterim] = useState<string>('');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
 
   // Live Camera Modal State
   const [cameraModalOpen, setCameraModalOpen] = useState<boolean>(false);
@@ -619,16 +629,13 @@ ${masterTableRows}`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  // Universal File & Photo Processor (Gallery, Files, Excel, PDF, Markdown, CSV, JSON, Drag & Drop)
+  // Universal File, Document & Photo Processor (Excel, Word, PDF, CSV, Text, Gallery, Camera, Drag & Drop)
   const processIncomingFiles = (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
     if (files.length === 0) return;
     triggerHaptic('light');
 
     files.forEach((file) => {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'txt';
-      const sizeLabel = formatFileSize(file.size);
-
       // 1. Image / Photo from Gallery or Camera -> Auto-Resize & Smart WebP/JPEG Compression (<150KB)
       if (file.type.startsWith('image/')) {
         compressImageFileToBase64(file, 1280, 0.82)
@@ -652,98 +659,129 @@ ${masterTableRows}`;
         return;
       }
 
-      // 2. Excel Spreadsheet (.xlsx, .xls) -> Parse into Markdown Table
-      if (ext === 'xlsx' || ext === 'xls') {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          try {
-            const data = new Uint8Array(ev.target?.result as ArrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheetSummaries: string[] = [];
-
-            workbook.SheetNames.slice(0, 3).forEach((sheetName) => {
-              const sheet = workbook.Sheets[sheetName];
-              const rows = XLSX.utils.sheet_to_json<string[]>(sheet, {
-                header: 1,
-                defval: '',
-              });
-              const nonEmptyRows = rows
-                .filter((r) => Array.isArray(r) && r.some((cell) => String(cell).trim() !== ''))
-                .slice(0, 120);
-
-              if (nonEmptyRows.length > 0) {
-                const header = nonEmptyRows[0].map((c) => String(c).trim() || '-');
-                const sep = header.map(() => '---');
-                const body = nonEmptyRows
-                  .slice(1)
-                  .map((r) => `| ${header.map((_, idx) => String(r[idx] ?? '').trim()).join(' | ')} |`)
-                  .join('\n');
-                sheetSummaries.push(
-                  `### Sheet: ${sheetName}\n| ${header.join(' | ')} |\n| ${sep.join(' | ')} |\n${body}`
-                );
-              }
-            });
-
-            setAttachedFiles((prev) => [
-              ...prev,
-              {
-                id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                name: file.name,
-                ext: 'xlsx',
-                sizeLabel,
-                textContent:
-                  sheetSummaries.join('\n\n') || 'Spreadsheet kosong.',
-              },
-            ]);
-          } catch {
-            // Fallback
-          }
-        };
-        reader.readAsArrayBuffer(file);
-        return;
-      }
-
-      // 3. PDF Document (.pdf) -> Native Gemini inlineData Base64
-      if (file.type === 'application/pdf' || ext === 'pdf') {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          const dataUrl = String(ev.target?.result || '');
-          const commaIdx = dataUrl.indexOf(',');
-          if (commaIdx !== -1) {
-            setAttachedFiles((prev) => [
-              ...prev,
-              {
-                id: `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                name: file.name,
-                ext: 'pdf',
-                sizeLabel,
-                base64Data: dataUrl.slice(commaIdx + 1),
-                mimeType: 'application/pdf',
-              },
-            ]);
-          }
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      // 4. Text / Markdown / CSV / JSON / Code files
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const textContent = String(ev.target?.result || '').slice(0, 24000);
-        setAttachedFiles((prev) => [
-          ...prev,
-          {
-            id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            name: file.name,
-            ext,
-            sizeLabel,
-            textContent,
-          },
-        ]);
-      };
-      reader.readAsText(file);
+      // 2. Documents: Excel (.xlsx, .xls), Word (.docx, .doc), PDF (.pdf), CSV, Text, Code
+      parseDocumentFile(file)
+        .then((parsed) => {
+          setAttachedFiles((prev) => [
+            ...prev,
+            {
+              id: parsed.id,
+              name: parsed.name,
+              ext: parsed.ext,
+              sizeLabel: parsed.sizeLabel,
+              textContent: parsed.textContent,
+              base64Data: parsed.base64Data,
+              mimeType: parsed.mimeType,
+              summary: parsed.summary,
+            },
+          ]);
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          const ext = file.name.split('.').pop()?.toLowerCase() || 'txt';
+          setAttachedFiles((prev) => [
+            ...prev,
+            {
+              id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              name: file.name,
+              ext,
+              sizeLabel: formatFileSize(file.size),
+              textContent: `Dokumen "${file.name}" terlampir (${msg}).`,
+            },
+          ]);
+        });
     });
+  };
+
+  // Voice to Text / Microphone Recognition Handlers (Web Speech API)
+  const stopVoiceListening = () => {
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch {
+        // Ignore
+      }
+      speechRecognitionRef.current = null;
+    }
+    setIsListening(false);
+    setVoiceInterim('');
+  };
+
+  const startVoiceListening = () => {
+    stopVoiceListening();
+    setVoiceError(null);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setVoiceError(
+        'Browser ini belum mendukung Web Speech API langsung. Disarankan menggunakan Google Chrome, Microsoft Edge, atau Safari.'
+      );
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = voiceLang;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        triggerHaptic('light');
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onresult = (event: any) => {
+        let interimText = '';
+        let finalText = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const trans = event.results[i][0]?.transcript || '';
+          if (event.results[i].isFinal) {
+            finalText += trans;
+          } else {
+            interimText += trans;
+          }
+        }
+
+        if (finalText.trim()) {
+          setInputText((prev) => (prev ? `${prev.trim()} ${finalText.trim()}` : finalText.trim()));
+        }
+        setVoiceInterim(interimText.trim());
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onerror = (event: any) => {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setVoiceError('Izin mikrofon tidak diberikan. Silakan izinkan akses mikrofon di pengaturan browser Anda.');
+        } else if (event.error !== 'no-speech') {
+          setVoiceError(`Error mikrofon: ${event.error}`);
+        }
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        setVoiceInterim('');
+      };
+
+      speechRecognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setVoiceError(`Gagal mengaktifkan mikrofon: ${msg}`);
+      setIsListening(false);
+    }
+  };
+
+  const toggleVoiceListening = () => {
+    if (isListening) {
+      stopVoiceListening();
+    } else {
+      startVoiceListening();
+    }
   };
 
   // File & Image Attachment Handler
@@ -2005,6 +2043,62 @@ ${masterTableRows}`;
           </div>
         )}
 
+        {/* Voice to Text (Microphone) Active Bar & Error Banner */}
+        {isListening && (
+          <div className="px-3 py-2 border-t border-rose-500/30 bg-rose-500/10 dark:bg-rose-950/20 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded-full bg-rose-600 text-white font-medium text-[11px]">
+                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                <span>Mendengarkan</span>
+              </div>
+              <p className="text-[#1C1B1A] dark:text-[#F2EFE9] text-xs truncate italic">
+                {voiceInterim || 'Bicara sekarang (misal: "Hitung harga box ukuran 30x20x15...")...'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setVoiceLang(voiceLang === 'id-ID' ? 'en-US' : 'id-ID')}
+                title="Ganti Bahasa Pengenalan Suara"
+                className="px-2 py-1 rounded-xs border border-black/15 dark:border-white/15 bg-white dark:bg-[#22201E] text-[11px] font-mono font-bold hover:text-[#C65D3B] transition-colors cursor-pointer"
+              >
+                {voiceLang === 'id-ID' ? 'ID (Indonesia)' : 'EN (English)'}
+              </button>
+              <button
+                type="button"
+                onClick={stopVoiceListening}
+                className="px-2.5 py-1 rounded-xs bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Selesai
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  stopVoiceListening();
+                  handleSendMessage();
+                }}
+                className="px-3 py-1 rounded-xs bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <Send className="w-3 h-3" />
+                <span>Kirim</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {voiceError && (
+          <div className="px-3 py-1.5 border-t border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between gap-2">
+            <span>{voiceError}</span>
+            <button
+              type="button"
+              onClick={() => setVoiceError(null)}
+              className="p-0.5 hover:text-black dark:hover:text-white cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Bottom Input Dock with Multimodal Plus Menu (Gemini / ChatGPT / Claude style) */}
         <div className="p-2.5 border-t border-black/8 dark:border-white/10 bg-[#F9F9F9] dark:bg-[#18191e] relative">
           {/* Hidden File / Gallery / Native Camera Inputs */}
@@ -2020,7 +2114,7 @@ ${masterTableRows}`;
             ref={fileAttachInputRef}
             type="file"
             multiple
-            accept="image/*,.pdf,.xlsx,.xls,.csv,.md,.markdown,.json,.txt,.ts,.tsx,.js,.jsx,.html,.css"
+            accept="image/*,.pdf,.docx,.doc,.xlsx,.xls,.csv,.tsv,.txt,.md,.markdown,.json,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.sql,.log"
             onChange={handleAttachmentUpload}
             className="hidden"
           />
@@ -2082,12 +2176,12 @@ ${masterTableRows}`;
                             Add photos & files
                           </div>
                           <div className="text-[11px] text-neutral-400 truncate">
-                            Upload from gallery or device
+                            Word (.docx), Excel (.xlsx), PDF, Foto
                           </div>
                         </div>
                       </button>
-                      {/* Quick Direct Buttons: Galeri Foto vs Dokumen/Excel */}
-                      <div className="mt-2 pl-12 flex items-center gap-1.5">
+                      {/* Quick Direct Buttons: Galeri Foto vs Dokumen/Word/Excel */}
+                      <div className="mt-2 pl-12 flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
                           onClick={() => {
@@ -2106,7 +2200,7 @@ ${masterTableRows}`;
                           }}
                           className="px-2 py-1 rounded-xs bg-[#F3F1ED] dark:bg-[#2A2825] hover:bg-[#C65D3B] hover:text-white text-[10px] font-semibold transition-colors cursor-pointer"
                         >
-                          File / Excel / PDF
+                          File / Word / Excel / PDF
                         </button>
                       </div>
                     </div>
@@ -2282,6 +2376,34 @@ ${masterTableRows}`;
               <span className="hidden sm:inline">Web</span>
             </button>
 
+            {/* Voice to Text / Microphone Button */}
+            <button
+              type="button"
+              onClick={toggleVoiceListening}
+              title={
+                isListening
+                  ? 'Hentikan dikte suara'
+                  : `Dikte pertanyaan suara (${voiceLang === 'id-ID' ? 'Bahasa Indonesia' : 'English'})`
+              }
+              className={`h-8 px-2 rounded-xs border flex items-center gap-1 text-[10px] font-medium cursor-pointer shrink-0 transition-colors ${
+                isListening
+                  ? 'bg-rose-600 border-rose-600 text-white font-semibold shadow-sm'
+                  : 'bg-white dark:bg-[#161311] border-black/10 dark:border-white/10 text-neutral-600 dark:text-neutral-400 hover:text-[#C65D3B] hover:border-[#C65D3B]'
+              }`}
+            >
+              {isListening ? (
+                <>
+                  <MicOff className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Stop</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Mic</span>
+                </>
+              )}
+            </button>
+
             <textarea
               rows={1}
               value={inputText}
@@ -2290,10 +2412,11 @@ ${masterTableRows}`;
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
+                  if (isListening) stopVoiceListening();
                   handleSendMessage();
                 }
               }}
-              placeholder="Ask anything..."
+              placeholder={isListening ? 'Mendengarkan suara Anda...' : 'Ask anything...'}
               className="flex-1 max-h-28 px-2.5 py-1.5 rounded-xs bg-white dark:bg-[#161311] border border-black/10 dark:border-white/10 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-400 focus:outline-1 focus:outline-[#C65D3B] resize-none overflow-y-auto no-scrollbar"
             />
 
@@ -2309,7 +2432,10 @@ ${masterTableRows}`;
             ) : (
               <button
                 type="button"
-                onClick={() => handleSendMessage()}
+                onClick={() => {
+                  if (isListening) stopVoiceListening();
+                  handleSendMessage();
+                }}
                 className="h-8 px-3 rounded-xs bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0"
               >
                 <Send className="w-3 h-3" />
