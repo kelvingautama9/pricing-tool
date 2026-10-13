@@ -173,6 +173,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const [voiceInterim, setVoiceInterim] = useState<string>('');
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const speechRecognitionRef = useRef<any>(null);
+  const voiceBaseTextRef = useRef<string>('');
 
   // Live Camera Modal State
   const [cameraModalOpen, setCameraModalOpen] = useState<boolean>(false);
@@ -711,6 +712,9 @@ ${masterTableRows}`;
     stopVoiceListening();
     setVoiceError(null);
 
+    // Simpan teks input saat ini sebagai baseline agar tidak terjadi duplikasi saat dikte
+    voiceBaseTextRef.current = inputText.trim();
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -734,22 +738,28 @@ ${masterTableRows}`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onresult = (event: any) => {
-        let interimText = '';
-        let finalText = '';
+        let allFinalText = '';
+        let allInterimText = '';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const trans = event.results[i][0]?.transcript || '';
-          if (event.results[i].isFinal) {
-            finalText += trans;
+        // Hitung transcript dari indeks 0 hingga akhir untuk mencegah bug duplikasi kata pada Android/Webkit
+        for (let i = 0; i < event.results.length; ++i) {
+          const res = event.results[i];
+          const transcript = (res[0]?.transcript || '').trim();
+          if (!transcript) continue;
+
+          if (res.isFinal) {
+            allFinalText += (allFinalText ? ' ' : '') + transcript;
           } else {
-            interimText += trans;
+            allInterimText += (allInterimText ? ' ' : '') + transcript;
           }
         }
 
-        if (finalText.trim()) {
-          setInputText((prev) => (prev ? `${prev.trim()} ${finalText.trim()}` : finalText.trim()));
-        }
-        setVoiceInterim(interimText.trim());
+        const base = voiceBaseTextRef.current;
+        const spoken = [allFinalText, allInterimText].filter(Boolean).join(' ').trim();
+        const fullMessage = base ? `${base} ${spoken}` : spoken;
+
+        setInputText(fullMessage);
+        setVoiceInterim(allInterimText || allFinalText || '');
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -925,6 +935,9 @@ ${masterTableRows}`;
 
   // Send Chat Message Lifecycle
   const handleSendMessage = async (overrideText?: string, overrideModelId?: string) => {
+    if (isListening) {
+      stopVoiceListening();
+    }
     const textToSend = (overrideText ?? inputText).trim();
     if (
       (!textToSend && attachedImages.length === 0 && attachedFiles.length === 0) ||
@@ -1496,7 +1509,7 @@ ${masterTableRows}`;
                     className="fixed inset-0 z-40"
                     onClick={() => setModelPopoverOpen(false)}
                   />
-                  <div className="absolute left-0 mt-1.5 w-72 sm:w-96 z-50 rounded-md p-2.5 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/15 dark:border-white/15 shadow-xl text-xs">
+                  <div className="absolute left-0 mt-1.5 w-[calc(100vw-2rem)] sm:w-96 max-w-[380px] max-h-[82dvh] flex flex-col z-50 rounded-xl p-2.5 bg-[#FFFFFF]/98 dark:bg-[#161311]/98 border border-black/15 dark:border-white/15 shadow-2xl text-xs overflow-hidden">
                     {/* Segmented Provider Tabs */}
                     <div className="grid grid-cols-3 gap-1 p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] mb-2">
                       {(
@@ -2781,32 +2794,42 @@ ${masterTableRows}`;
 
       {/* DYNAMIC PROVIDER & SERVER CONFIGURATION MODAL */}
       {serverModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-lg bg-[#FFFFFF] dark:bg-[#161311] border border-black/15 dark:border-white/15 shadow-xl p-4 space-y-3.5 text-xs">
-            <div className="flex items-center justify-between pb-2 border-b border-black/8 dark:border-white/10">
-              <div>
-                <h3 className="text-sm font-display font-bold">
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overflow-hidden"
+          onClick={() => setServerModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[92dvh] sm:max-h-[88dvh] rounded-2xl bg-[#FFFFFF] dark:bg-[#161311] border border-black/15 dark:border-white/15 shadow-2xl flex flex-col overflow-hidden text-xs my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sticky Header */}
+            <div className="px-4 py-3 border-b border-black/8 dark:border-white/10 flex items-center justify-between shrink-0 bg-[#FFFFFF] dark:bg-[#161311] z-10">
+              <div className="min-w-0 pr-2">
+                <h3 className="text-sm font-display font-bold text-[#1C1B1A] dark:text-[#F2EFE9] truncate">
                   {providerTab === 'gemini'
                     ? 'Pengaturan Server Google Gemini'
                     : providerTab === 'qwen'
-                    ? 'Pengaturan Server OpenRouter / Qwen Cloud'
+                    ? 'Pengaturan Server OpenRouter / Qwen'
                     : 'Pengaturan Server Local LM Studio'}
                 </h3>
-                <p className="text-[10.5px] text-neutral-400 mt-0.5">
+                <p className="text-[10.5px] text-neutral-400 mt-0.5 truncate">
                   Konfigurasi modul mengikuti provider yang sedang aktif
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setServerModalOpen(false)}
-                className="text-neutral-400 hover:text-neutral-700 cursor-pointer"
+                className="p-1.5 rounded-lg bg-black/5 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500 transition-colors cursor-pointer shrink-0"
+                aria-label="Tutup pengaturan modal"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Provider Switcher inside Modal */}
-            <div className="grid grid-cols-3 gap-1 p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E]">
+            {/* Scrollable Content Body */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3.5 sm:p-4 space-y-3.5 overscroll-contain">
+              {/* Provider Switcher inside Modal */}
+              <div className="grid grid-cols-3 gap-1 p-0.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E]">
               {(
                 [
                   { id: 'gemini', label: 'Google Gemini' },
@@ -3207,13 +3230,21 @@ ${masterTableRows}`;
               </div>
             )}
 
-            <div className="flex justify-end pt-2">
+            </div>
+
+            {/* Sticky Footer */}
+            <div className="px-4 py-2.5 border-t border-black/8 dark:border-white/10 flex items-center justify-between gap-2 shrink-0 bg-[#F9F9F9] dark:bg-[#1E1D1B] z-10">
+              <span className="text-[10.5px] text-neutral-400 truncate">
+                {providerTab === 'local'
+                  ? `${serverConfig.detectedLocalModels?.length || 0} model lokal terdeteksi`
+                  : 'Siap digunakan'}
+              </span>
               <button
                 type="button"
                 onClick={() => setServerModalOpen(false)}
-                className="px-3 py-1.5 rounded-xs bg-[#C65D3B] text-white font-semibold cursor-pointer"
+                className="px-4 py-1.5 rounded-xs bg-[#C65D3B] hover:bg-[#b24f2f] text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors shrink-0"
               >
-                Selesai
+                Tutup & Selesai
               </button>
             </div>
           </div>
