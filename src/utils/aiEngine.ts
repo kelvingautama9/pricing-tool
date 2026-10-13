@@ -75,42 +75,42 @@ export const AI_MODELS: AIModelOption[] = [
     name: 'gemini-2.5-flash',
     provider: 'gemini',
     badge: 'Default · Paling Stabil',
-    description: 'Rekomendasi Utama: Cepat, presisi matematika tinggi, anti-halu & paling jarang error',
+    description: '',
   },
   {
     id: 'gemini-2.5-flash-lite',
     name: 'gemini-2.5-flash-lite',
     provider: 'gemini',
     badge: 'Fallback #1 · Anti-Limit',
-    description: 'Kuota RPM paling besar, respons instan & paling tahan antrean 429/503',
+    description: '',
   },
   {
     id: 'gemini-flash-latest',
     name: 'gemini-flash-latest',
     provider: 'gemini',
     badge: 'Fallback #2 · Stable Alias',
-    description: 'Alias rilis produksi stabil terbaru keluarga Gemini Flash',
+    description: '',
   },
   {
     id: 'gemini-2.5-pro',
     name: 'gemini-2.5-pro',
     provider: 'gemini',
     badge: 'Fallback #3 · Deep Pro',
-    description: 'Penalaran mendalam untuk audit harga multi-customer & rumus kompleks',
+    description: '',
   },
   {
     id: 'gemini-3.1-flash-lite',
     name: 'gemini-3.1-flash-lite',
     provider: 'gemini',
     badge: 'Fallback #4 · Next-Gen Lite',
-    description: 'Model ringan generasi 3.1 dengan respons ultra cepat',
+    description: '',
   },
   {
     id: 'gemini-3.1-pro-preview',
     name: 'gemini-3.1-pro-preview',
     provider: 'gemini',
     badge: 'Fallback #5 · Next-Gen Pro',
-    description: 'Model Pro generasi 3.1 untuk kalkulasi & kode tingkat lanjut',
+    description: '',
   },
   // OpenRouter Cloud (Live Verified 2026 Free Models + Auto-Router Fallback)
   {
@@ -118,42 +118,42 @@ export const AI_MODELS: AIModelOption[] = [
     name: 'OpenRouter Free Auto-Router',
     provider: 'qwen',
     badge: 'OpenRouter · Default',
-    description: 'Router cerdas OpenRouter: otomatis memilih model gratis yang sedang online & bebas antrean',
+    description: '',
   },
   {
     id: 'google/gemma-4-31b-it:free',
     name: 'Google Gemma 4 31B IT',
     provider: 'qwen',
     badge: 'Fallback #1 · Gemma 4',
-    description: 'Model terbuka generasi 4 (31B) via OpenRouter — presisi & cepat',
+    description: '',
   },
   {
     id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
     name: 'NVIDIA Nemotron 3 Ultra 550B',
     provider: 'qwen',
     badge: 'Fallback #2 · Ultra 550B',
-    description: 'Model skala besar NVIDIA 550B MoE untuk kalkulasi tabel & analisis harga',
+    description: '',
   },
   {
     id: 'nvidia/nemotron-3-super-120b-a12b:free',
     name: 'NVIDIA Nemotron 3 Super 120B',
     provider: 'qwen',
     badge: 'Fallback #3 · Super 120B',
-    description: 'Model 120B MoE cepat & stabil untuk logika matematika dan diskon customer',
+    description: '',
   },
   {
     id: 'google/gemma-4-26b-a4b-it:free',
     name: 'Google Gemma 4 26B MoE',
     provider: 'qwen',
     badge: 'Fallback #4 · Fast MoE',
-    description: 'Arsitektur aktif 4B yang sangat ringan dan responsif',
+    description: '',
   },
   {
     id: 'nvidia/nemotron-3.5-lightning:free',
     name: 'NVIDIA Nemotron 3.5 Lightning',
     provider: 'qwen',
     badge: 'Fallback #5 · Ultra Cepat',
-    description: 'Kecepatan generasi token ultra tinggi via OpenRouter',
+    description: '',
   },
   // Local LM Studio / Ollama
   {
@@ -161,7 +161,7 @@ export const AI_MODELS: AIModelOption[] = [
     name: 'LM Studio / Ollama Local',
     provider: 'local',
     badge: 'Local Server',
-    description: 'Eksekusi offline via localhost:1234 atau Cloudflare Tunnel',
+    description: '',
   },
 ];
 
@@ -380,6 +380,28 @@ export interface LocalServerDetectResult {
 }
 
 /**
+ * Normalisasi URL endpoint lokal (otomatis menambahkan https:// untuk domain/tunnel seperti api.vinns.my.id)
+ */
+export function normalizeLocalEndpoint(raw: string): string {
+  let clean = (raw || '').trim().replace(/\/+$/, '');
+  if (!clean) return 'http://localhost:1234';
+  if (!/^https?:\/\//i.test(clean)) {
+    if (
+      clean.includes('.') &&
+      !clean.startsWith('127.') &&
+      !clean.startsWith('192.168.') &&
+      !clean.startsWith('10.') &&
+      !clean.startsWith('localhost')
+    ) {
+      clean = `https://${clean}`;
+    } else {
+      clean = `http://${clean}`;
+    }
+  }
+  return clean;
+}
+
+/**
  * Format bytes to readable string (e.g. 4.7 GB)
  */
 export function formatModelBytes(bytes?: number): string {
@@ -391,16 +413,17 @@ export function formatModelBytes(bytes?: number): string {
 }
 
 /**
- * Mendeteksi model yang terpasang dan yang sedang aktif di VRAM pada server lokal (Ollama / LM Studio)
- * Mencoba direct fetch terlebih dahulu, dan otomatis fallback ke proxy /api/local/detect jika terkena CORS/Mixed-Content.
+ * Mendeteksi model yang terpasang dan yang sedang aktif di VRAM pada server lokal (Ollama / LM Studio / Cloudflare Tunnel)
+ * Mencoba direct fetch dan server proxy secara adaptif untuk menjamin koneksi Cloudflare Tunnel & localhost.
  */
 export async function detectLocalModels(
   rawEndpoint: string
 ): Promise<LocalServerDetectResult> {
-  const baseUrl = (rawEndpoint || 'http://localhost:1234').trim().replace(/\/+$/, '');
+  const baseUrl = normalizeLocalEndpoint(rawEndpoint);
+  const rootUrl = baseUrl.replace(/\/v1$/, '');
   const startTime = Date.now();
 
-  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 3000) => {
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 5000) => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -413,22 +436,25 @@ export async function detectLocalModels(
     }
   };
 
-  // 1. Coba deteksi via backend proxy terlebih dahulu jika endpoint lokal (menjamin lolos CORS di browser HTTPS)
-  // Namun jika direct fetch lokal lebih disukai pada browser localhost:
+  // 1. Coba deteksi via backend proxy terlebih dahulu (menjamin lolos CORS/WAF pada Cloudflare Tunnel)
+  let lastDiagnosticError = '';
   try {
     const proxyRes = await fetchWithTimeout(
       `/api/local/detect?endpoint=${encodeURIComponent(baseUrl)}`,
       {},
-      4000
+      7000
     );
     if (proxyRes.ok) {
       const proxyData = (await proxyRes.json()) as LocalServerDetectResult;
       if (proxyData.connected) {
         return proxyData;
       }
+      if (proxyData.error) {
+        lastDiagnosticError = proxyData.error;
+      }
     }
   } catch {
-    // Abaikan jika server proxy tidak merespons, coba direct fetch dari browser
+    // Lanjut ke direct browser fetch jika proxy tidak merespons
   }
 
   // 2. Direct browser fetch: Cek apakah Ollama (/api/tags & /api/ps)
@@ -571,7 +597,9 @@ export async function detectLocalModels(
     serverUrl: baseUrl,
     models: [],
     loadedModelIds: [],
-    error: `Tidak dapat mendeteksi server lokal di ${baseUrl}. Pastikan Ollama atau LM Studio sedang berjalan.`,
+    error:
+      lastDiagnosticError ||
+      `Tidak dapat mendeteksi server lokal di ${baseUrl}. Pastikan Ollama atau LM Studio sedang berjalan.`,
   };
 }
 
@@ -582,9 +610,10 @@ export async function loadLocalModel(
   rawEndpoint: string,
   modelId: string
 ): Promise<{ success: boolean; message: string; latencyMs?: number }> {
-  const baseUrl = (rawEndpoint || 'http://localhost:1234').trim().replace(/\/+$/, '');
+  const baseUrl = normalizeLocalEndpoint(rawEndpoint);
 
-  // Coba via server proxy terlebih dahulu (lolos CORS & timeout panjang hingga 30s)
+  // Coba via server proxy terlebih dahulu (menjamin tembus Cloudflare Tunnel & bypass CORS)
+  let lastProxyMessage = '';
   try {
     const proxyRes = await fetch('/api/local/load', {
       method: 'POST',
@@ -597,7 +626,10 @@ export async function loadLocalModel(
         message: string;
         latencyMs?: number;
       };
-      return data;
+      if (data.success) {
+        return data;
+      }
+      lastProxyMessage = data.message;
     }
   } catch {
     // Fallback ke direct fetch
@@ -648,7 +680,12 @@ export async function loadLocalModel(
     return { success: false, message: `Gagal memuat model: ${msg}` };
   }
 
-  return { success: false, message: `Gagal mengirim instruksi load ke ${baseUrl}` };
+  return {
+    success: false,
+    message:
+      lastProxyMessage ||
+      `Tidak dapat memuat model ${modelId} ke VRAM di ${baseUrl}. Pastikan Cloudflare Tunnel dan server AI aktif.`,
+  };
 }
 
 /**
@@ -658,7 +695,7 @@ export async function pullLocalModel(
   rawEndpoint: string,
   modelName: string
 ): Promise<{ success: boolean; message: string }> {
-  const baseUrl = (rawEndpoint || 'http://localhost:11434').trim().replace(/\/+$/, '');
+  const baseUrl = normalizeLocalEndpoint(rawEndpoint);
 
   try {
     const res = await fetch('/api/local/pull', {
@@ -1163,8 +1200,9 @@ export async function executeChatStream(
     return;
   }
 
-  // OpenAI-Compatible SSE Stream for Local (LM Studio / Ollama)
-  const endpointUrl = `${serverConfig.localEndpoint.replace(/\/+$/, '')}/v1/chat/completions`;
+  // OpenAI-Compatible SSE Stream for Local (LM Studio / Ollama / Cloudflare Tunnel)
+  const normalizedLocal = normalizeLocalEndpoint(serverConfig.localEndpoint);
+  const endpointUrl = `${normalizedLocal.replace(/\/v1$/, '')}/v1/chat/completions`;
 
   const attemptOpenAiStream = async (includeMaxTokens: boolean) => {
     const bodyPayload: Record<string, unknown> = {
@@ -1253,7 +1291,10 @@ export async function executeChatStream(
       errText.includes('Failed to fetch') ||
       errText.includes('NetworkError') ||
       errText.includes('Network request failed') ||
-      errText.includes('mixed content');
+      errText.includes('mixed content') ||
+      errText.includes('502') ||
+      errText.includes('504') ||
+      errText.includes('CORS');
 
     // Auto-Rescue via backend proxy /api/local/stream jika koneksi browser langsung terhambat CORS/Mixed-Content
     if (provider === 'local' && isNetworkOrFetchError && !abortSignal?.aborted) {

@@ -104,17 +104,48 @@ async function startServer() {
     return `${mb.toFixed(0)} MB`;
   };
 
-  // Endpoint: Deteksi model & status server lokal (Ollama / LM Studio / OpenAI-Compatible)
+  // Helper normalisasi URL (otomatis menambahkan https:// untuk domain/tunnel seperti api.vinns.my.id)
+  const normalizeLocalUrl = (raw: string): string => {
+    let clean = String(raw || '').trim().replace(/\/+$/, '');
+    if (!clean) return 'http://127.0.0.1:1234';
+    if (!/^https?:\/\//i.test(clean)) {
+      if (
+        clean.includes('.') &&
+        !clean.startsWith('127.') &&
+        !clean.startsWith('192.168.') &&
+        !clean.startsWith('10.') &&
+        !clean.startsWith('localhost')
+      ) {
+        clean = `https://${clean}`;
+      } else {
+        clean = `http://${clean}`;
+      }
+    }
+    return clean;
+  };
+
+  const BROWSER_HEADERS: Record<string, string> = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    Accept: 'application/json, text/plain, */*',
+  };
+
+  // Endpoint: Deteksi model & status server lokal (Ollama / LM Studio / Cloudflare Tunnel / OpenAI-Compatible)
   app.get('/api/local/detect', async (req, res) => {
     const rawEndpoint = String(req.query.endpoint || 'http://127.0.0.1:1234').trim();
-    const baseUrl = rawEndpoint.replace(/\/+$/, '');
+    const baseUrl = normalizeLocalUrl(rawEndpoint);
+    const rootUrl = baseUrl.replace(/\/v1$/, '');
     const startTime = Date.now();
 
-    const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 3500) => {
+    const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 4500) => {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
+        const response = await fetch(url, {
+          ...options,
+          headers: { ...BROWSER_HEADERS, ...(options.headers as Record<string, string>) },
+          signal: controller.signal,
+        });
         clearTimeout(id);
         return response;
       } catch (err) {
@@ -124,36 +155,52 @@ async function startServer() {
     };
 
     try {
-      // 1. Cek apakah server adalah Ollama (/api/tags & /api/ps)
-      let isOllama = false;
-      let ollamaModels: Array<Record<string, unknown>> = [];
-      let loadedModelIds: string[] = [];
+      // Jalankan pengecekan kandidat endpoint secara PARALEL agar ultra-responsif (tidak menunggu satu-satu hingga timeout)
+      const probeUrls = [
+        { type: 'ollama', url: `${rootUrl}/api/tags` },
+        { type: 'lmstudio', url: `${rootUrl}/api/v0/models` },
+        { type: 'openai', url: `${rootUrl}/v1/models` },
+        { type: 'openai-alt', url: `${baseUrl}/models` },
+      ];
 
-      try {
-        const tagsRes = await fetchWithTimeout(`${baseUrl}/api/tags`, {}, 2500);
-        if (tagsRes.ok) {
-          const tagsData = (await tagsRes.json()) as { models?: Array<Record<string, unknown>> };
-          if (Array.isArray(tagsData.models)) {
-            isOllama = true;
-            ollamaModels = tagsData.models;
+      let cfStatusCode: number | null = null;
 
-            // Cek model yang sedang aktif di VRAM/RAM via /api/ps
+      const probeResults = await Promise.allSettled(
+        probeUrls.map(async (probe) => {
+          try {
+            const resp = await fetchWithTimeout(probe.url, {}, 4500);
+            if ([502, 503, 504, 520, 521, 522, 523].includes(resp.status)) {
+              cfStatusCode = resp.status;
+            }
+            if (!resp.ok) return null;
+            const data = await resp.json().catch(() => null);
+            return { probe, data, status: resp.status };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      // 1. Cek hasil Ollama
+      for (const resItem of probeResults) {
+        if (resItem.status === 'fulfilled' && resItem.value?.probe.type === 'ollama') {
+          const tagsData = resItem.value.data as { models?: Array<Record<string, unknown>> } | null;
+          if (tagsData && Array.isArray(tagsData.models) && tagsData.models.length > 0) {
+            let loadedModelIds: string[] = [];
             try {
-              const psRes = await fetchWithTimeout(`${baseUrl}/api/ps`, {}, 2000);
+              const psRes = await fetchWithTimeout(`${rootUrl}/api/ps`, {}, 2500);
               if (psRes.ok) {
                 const psData = (await psRes.json()) as { models?: Array<{ name?: string; model?: string }> };
                 if (Array.isArray(psData.models)) {
-                  loadedModelIds = psData.models
-                    .map((m) => m.name || m.model || '')
-                    .filter(Boolean);
+                  loadedModelIds = psData.models.map((m) => m.name || m.model || '').filter(Boolean);
                 }
               }
             } catch {
-              // Abaikan jika /api/ps tidak tersedia
+              // Abaikan jika ps tidak tersedia
             }
 
             const latencyMs = Date.now() - startTime;
-            const models = ollamaModels.map((m) => {
+            const models = tagsData.models.map((m) => {
               const modelId = String(m.name || m.model || '');
               const details = (m.details || {}) as Record<string, unknown>;
               const size = typeof m.size === 'number' ? m.size : undefined;
@@ -171,8 +218,8 @@ async function startServer() {
                 quantization: String(details.quantization_level || ''),
                 family: String(details.family || ''),
                 isLoaded,
-                badge: isLoaded ? '🟢 VRAM Aktif' : details.parameter_size ? `${details.parameter_size} · Disk` : 'Local Server',
-                description: `${details.parameter_size ? details.parameter_size + ' · ' : ''}${details.quantization_level ? details.quantization_level + ' · ' : ''}${formatBytes(size)} via Ollama`,
+                badge: isLoaded ? '🟢 VRAM Aktif' : details.parameter_size ? `${details.parameter_size} · Disk` : 'Ollama',
+                description: '',
               };
             });
 
@@ -186,16 +233,13 @@ async function startServer() {
             });
           }
         }
-      } catch {
-        // Bukan Ollama atau timeout, lanjut ke LM Studio
       }
 
-      // 2. Cek apakah server adalah LM Studio (LM Studio REST API /api/v0/models atau /v1/models)
-      try {
-        const v0Res = await fetchWithTimeout(`${baseUrl}/api/v0/models`, {}, 2500);
-        if (v0Res.ok) {
-          const v0Data = (await v0Res.json()) as { models?: Array<Record<string, unknown>> };
-          if (Array.isArray(v0Data.models)) {
+      // 2. Cek hasil LM Studio v0
+      for (const resItem of probeResults) {
+        if (resItem.status === 'fulfilled' && resItem.value?.probe.type === 'lmstudio') {
+          const v0Data = resItem.value.data as { models?: Array<Record<string, unknown>> } | null;
+          if (v0Data && Array.isArray(v0Data.models) && v0Data.models.length > 0) {
             const latencyMs = Date.now() - startTime;
             const models = v0Data.models.map((m) => {
               const modelId = String(m.identifier || m.id || m.key || '');
@@ -215,7 +259,7 @@ async function startServer() {
                 family: arch,
                 isLoaded,
                 badge: isLoaded ? '🟢 VRAM Aktif' : 'LM Studio · Disk',
-                description: `Model LM Studio ${isLoaded ? '(Aktif di VRAM)' : '(Tersimpan di Disk)'}`,
+                description: '',
               };
             });
 
@@ -229,48 +273,66 @@ async function startServer() {
             });
           }
         }
-      } catch {
-        // Lanjut ke /v1/models
       }
 
-      // 3. Fallback: OpenAI Compatible Standard (/v1/models)
-      try {
-        const v1Res = await fetchWithTimeout(`${baseUrl}/v1/models`, {}, 2500);
-        if (v1Res.ok) {
-          const v1Data = (await v1Res.json()) as { data?: Array<Record<string, unknown>> };
-          if (Array.isArray(v1Data.data)) {
-            const latencyMs = Date.now() - startTime;
-            const models = v1Data.data.map((m) => {
-              const modelId = String(m.id || '');
-              const isLoaded = m.state === 'loaded' || m.loaded === true;
-              return {
-                id: modelId,
-                name: modelId,
-                provider: 'local',
-                isLoaded,
-                badge: isLoaded ? '🟢 VRAM Aktif' : 'Local LM',
-                description: `Model terdeteksi via ${baseUrl}/v1/models`,
-              };
-            });
+      // 3. Cek hasil OpenAI Compatible (/v1/models atau /models)
+      for (const resItem of probeResults) {
+        if (resItem.status === 'fulfilled' && (resItem.value?.probe.type === 'openai' || resItem.value?.probe.type === 'openai-alt')) {
+          const v1Data = resItem.value.data as { data?: Array<Record<string, unknown>>; models?: Array<Record<string, unknown>> } | null;
+          if (v1Data) {
+            const modelList = Array.isArray(v1Data.data)
+              ? v1Data.data
+              : Array.isArray(v1Data.models)
+              ? v1Data.models
+              : [];
 
-            return res.json({
-              connected: true,
-              serverType: baseUrl.includes('1234') ? 'lmstudio' : 'openai-compatible',
-              serverUrl: baseUrl,
-              latencyMs,
-              models,
-              loadedModelIds: models.filter((m) => m.isLoaded).map((m) => m.id),
-            });
+            if (modelList.length > 0) {
+              const latencyMs = Date.now() - startTime;
+              const models = modelList.map((m) => {
+                const modelId = String(m.id || m.name || m.model || '');
+                const isLoaded = m.state === 'loaded' || m.loaded === true;
+                return {
+                  id: modelId,
+                  name: modelId,
+                  provider: 'local',
+                  isLoaded,
+                  badge: isLoaded ? '🟢 VRAM Aktif' : 'Local LM',
+                  description: '',
+                };
+              });
+
+              return res.json({
+                connected: true,
+                serverType: baseUrl.includes('1234')
+                  ? 'lmstudio'
+                  : baseUrl.includes('11434')
+                  ? 'ollama'
+                  : 'openai-compatible',
+                serverUrl: baseUrl,
+                latencyMs,
+                models,
+                loadedModelIds: models.filter((m) => m.isLoaded).map((m) => m.id),
+              });
+            }
           }
         }
-      } catch {
-        // Abaikan
+      }
+
+      // Jika ada respon Cloudflare 502/504
+      if (cfStatusCode) {
+        return res.json({
+          connected: false,
+          serverUrl: baseUrl,
+          error: `Cloudflare (${baseUrl}) terhubung, namun mengembalikan HTTP ${cfStatusCode} (Bad Gateway / Offline). Pastikan server AI di komputer Anda (LM Studio port 1234 atau Ollama port 11434) dan tunnel cloudflared sedang dalam kondisi aktif (Running).`,
+          models: [],
+          loadedModelIds: [],
+        });
       }
 
       return res.json({
         connected: false,
         serverUrl: baseUrl,
-        error: `Tidak dapat mendeteksi model di ${baseUrl}. Pastikan Ollama atau LM Studio sedang aktif dan port sesuai.`,
+        error: `Tidak dapat mendeteksi model di ${baseUrl}. Pastikan Cloudflare Tunnel atau server AI (LM Studio / Ollama) sedang berjalan.`,
         models: [],
         loadedModelIds: [],
       });
@@ -279,7 +341,7 @@ async function startServer() {
       return res.json({
         connected: false,
         serverUrl: baseUrl,
-        error: `Koneksi gagal: ${errMsg}`,
+        error: `Koneksi gagal ke ${baseUrl}: ${errMsg}`,
         models: [],
         loadedModelIds: [],
       });
@@ -290,20 +352,21 @@ async function startServer() {
   app.post('/api/local/load', async (req, res) => {
     const { endpoint = 'http://127.0.0.1:1234', model = '' } = req.body || {};
     if (!model) {
-      return res.status(400).json({ success: false, message: 'Parameter model wajib diisi' });
+      return res.json({ success: false, message: 'Parameter model wajib diisi' });
     }
 
-    const baseUrl = String(endpoint).trim().replace(/\/+$/, '');
+    const baseUrl = normalizeLocalUrl(String(endpoint));
+    const rootUrl = baseUrl.replace(/\/v1$/, '');
     const startTime = Date.now();
 
     try {
       // 1. Coba cara Ollama: POST /api/generate dengan empty prompt & keep_alive
       try {
-        const ollamaRes = await fetch(`${baseUrl}/api/generate`, {
+        const ollamaRes = await fetch(`${rootUrl}/api/generate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...BROWSER_HEADERS },
           body: JSON.stringify({ model, keep_alive: '15m' }),
-          signal: AbortSignal.timeout(25000), // Berikan waktu hingga 25s untuk memuat bobot ke VRAM
+          signal: AbortSignal.timeout(30000),
         });
         if (ollamaRes.ok) {
           const latencyMs = Date.now() - startTime;
@@ -321,11 +384,11 @@ async function startServer() {
 
       // 2. Coba cara LM Studio v0.3: POST /api/v0/models/load
       try {
-        const lmsRes = await fetch(`${baseUrl}/api/v0/models/load`, {
+        const lmsRes = await fetch(`${rootUrl}/api/v0/models/load`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...BROWSER_HEADERS },
           body: JSON.stringify({ modelKey: model, identifier: model }),
-          signal: AbortSignal.timeout(25000),
+          signal: AbortSignal.timeout(30000),
         });
         if (lmsRes.ok) {
           const latencyMs = Date.now() - startTime;
@@ -343,15 +406,15 @@ async function startServer() {
 
       // 3. Fallback: Warm-up ping melalui /v1/chat/completions (memicu Just-In-Time model load di LM Studio / LocalAI)
       try {
-        const warmupRes = await fetch(`${baseUrl}/v1/chat/completions`, {
+        const warmupRes = await fetch(`${rootUrl}/v1/chat/completions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...BROWSER_HEADERS },
           body: JSON.stringify({
             model,
             messages: [{ role: 'user', content: 'hi' }],
             max_tokens: 1,
           }),
-          signal: AbortSignal.timeout(25000),
+          signal: AbortSignal.timeout(30000),
         });
         if (warmupRes.ok) {
           const latencyMs = Date.now() - startTime;
@@ -365,21 +428,21 @@ async function startServer() {
         }
       } catch (warmupErr: unknown) {
         const msg = warmupErr instanceof Error ? warmupErr.message : String(warmupErr);
-        return res.status(500).json({
+        return res.json({
           success: false,
           message: `Gagal memuat model ${model}: ${msg}`,
         });
       }
 
-      return res.status(500).json({
+      return res.json({
         success: false,
-        message: `Gagal menghubungi endpoint load di ${baseUrl}.`,
+        message: `Gagal menghubungi endpoint load di ${baseUrl}. Pastikan Cloudflare Tunnel dan server AI aktif.`,
       });
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      return res.status(500).json({
+      return res.json({
         success: false,
-        message: `Terjadi kesalahan saat memuat model: ${errMsg}`,
+        message: `Error saat memuat model: ${errMsg}`,
       });
     }
   });
@@ -391,12 +454,13 @@ async function startServer() {
       return res.status(400).json({ success: false, message: 'Nama model wajib diisi' });
     }
 
-    const baseUrl = String(endpoint).trim().replace(/\/+$/, '');
+    const baseUrl = normalizeLocalUrl(String(endpoint));
+    const rootUrl = baseUrl.replace(/\/v1$/, '');
 
     try {
-      const pullRes = await fetch(`${baseUrl}/api/pull`, {
+      const pullRes = await fetch(`${rootUrl}/api/pull`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...BROWSER_HEADERS },
         body: JSON.stringify({ name: model, stream: false }),
         signal: AbortSignal.timeout(180000), // 3 menit untuk download model
       });
@@ -433,8 +497,8 @@ async function startServer() {
       maxTokens = 2048,
     } = req.body || {};
 
-    const baseUrl = String(endpoint).trim().replace(/\/+$/, '');
-    const targetUrl = `${baseUrl}/v1/chat/completions`;
+    const baseUrl = normalizeLocalUrl(String(endpoint));
+    const targetUrl = `${baseUrl.replace(/\/v1$/, '')}/v1/chat/completions`;
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -454,7 +518,10 @@ async function startServer() {
     try {
       const upstreamRes = await fetch(targetUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...BROWSER_HEADERS,
+        },
         body: JSON.stringify({
           model,
           messages,

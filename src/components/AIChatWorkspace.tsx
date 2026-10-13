@@ -54,6 +54,7 @@ import {
   pullLocalModel,
   DetectedLocalModel,
   formatModelBytes,
+  normalizeLocalEndpoint,
 } from '../utils/aiEngine';
 import {
   estimateTokens,
@@ -154,6 +155,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const [isPullingModel, setIsPullingModel] = useState<boolean>(false);
   const [pullModelInput, setPullModelInput] = useState<string>('');
   const [pullModelStatus, setPullModelStatus] = useState<string>('');
+  const [manualModelInput, setManualModelInput] = useState<string>('');
 
   // 4. Input, Attachments, Plus Menu & Camera State
   const [inputText, setInputText] = useState<string>('');
@@ -217,11 +219,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
         : dm.parameterSize
         ? `${dm.parameterSize} · Di Disk`
         : 'Local Server',
-      description: `${dm.parameterSize ? dm.parameterSize + ' · ' : ''}${
-        dm.quantization ? dm.quantization + ' · ' : ''
-      }${dm.sizeFormatted ? '(' + dm.sizeFormatted + ')' : ''} via ${
-        serverConfig.localEndpoint
-      }`,
+      description: '',
       isLoaded: dm.isLoaded,
       sizeFormatted: dm.sizeFormatted,
       parameterSize: dm.parameterSize,
@@ -240,7 +238,7 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
         name: 'LM Studio / Ollama Local',
         provider: 'local',
         badge: 'Local Server',
-        description: `Eksekusi offline via ${serverConfig.localEndpoint}`,
+        description: '',
       },
     ];
   }, [serverConfig.detectedLocalModels, serverConfig.localEndpoint]);
@@ -251,12 +249,13 @@ export const AIChatWorkspace: React.FC<AIChatWorkspaceProps> = ({
   const activeRoleObj: Role =
     roles.find((r) => r.id === activeRoleId) || roles[0] || BUILT_IN_ROLES[0];
 
-  // Handler: Deteksi model dari server lokal (Ollama / LM Studio)
+  // Handler: Deteksi model dari server lokal (Ollama / LM Studio / Cloudflare Tunnel)
   const handleDetectLocalModels = async (endpointToTest?: string) => {
-    const targetEndpoint =
-      endpointToTest || serverConfig.localEndpoint || 'http://localhost:1234';
+    const rawTarget =
+      endpointToTest || serverConfig.localEndpoint || 'https://api.vinns.my.id';
+    const targetEndpoint = normalizeLocalEndpoint(rawTarget);
     setIsDetectingModels(true);
-    setDetectionStatus('Memindai server dan mendeteksi model...');
+    setDetectionStatus(`Memindai ${targetEndpoint} dan mendeteksi model...`);
     try {
       const result = await detectLocalModels(targetEndpoint);
       if (result.connected && result.models.length > 0) {
@@ -1582,11 +1581,6 @@ ${masterTableRows}`;
                                       {isLoadingThis ? 'Memuat ke VRAM...' : m.badge}
                                     </span>
                                   </div>
-                                  {m.description && (
-                                    <div className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate mt-0.5">
-                                      {m.description}
-                                    </div>
-                                  )}
                                 </div>
                                 {isLoadingThis ? (
                                   <RefreshCw className="w-3.5 h-3.5 text-[#C65D3B] animate-spin shrink-0" />
@@ -2769,7 +2763,19 @@ ${masterTableRows}`;
                     <label className="text-[11px] font-medium text-[#1C1B1A] dark:text-[#F2EFE9]">
                       Endpoint Server AI Lokal
                     </label>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ep = 'https://api.vinns.my.id';
+                          setServerConfig((prev) => ({ ...prev, localEndpoint: ep }));
+                          handleDetectLocalModels(ep);
+                        }}
+                        className="px-1.5 py-0.5 rounded-xs bg-[#C65D3B]/10 hover:bg-[#C65D3B]/20 text-[9.5px] font-mono text-[#C65D3B] border border-[#C65D3B]/30 cursor-pointer font-bold"
+                        title="Cloudflare Tunnel (api.vinns.my.id)"
+                      >
+                        api.vinns.my.id (Tunnel)
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -2807,7 +2813,13 @@ ${masterTableRows}`;
                           localEndpoint: e.target.value,
                         }))
                       }
-                      placeholder="http://localhost:1234 atau http://localhost:11434"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleDetectLocalModels();
+                        }
+                      }}
+                      placeholder="https://api.vinns.my.id atau http://localhost:1234"
                       className="flex-1 px-2.5 py-1.5 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] border border-black/10 dark:border-white/10 font-mono text-[11px]"
                     />
                     <button
