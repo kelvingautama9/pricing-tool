@@ -191,7 +191,7 @@ Tugas Utama Anda (Multitasking):
 2. **Perhitungan Harga Karton Sheet (THE ADDITIVE ARCHITECTURE):**
    - Mendukung **Single Wall (B/F, C/F, E/F — 3 Layer: Top/Mid/Bot)** dan **Double Wall (CB/F — 5 Layer: Top/Flute1/Mid/Flute2/Bot)**.
    - Mematuhi urutan **Additive Modifier** (DILARANG melakukan hitungan bunga-berbunga / compounding):
-     * **Tahap 1 (Base Lookup):** Cari di \`base_price_table\` (acuan 125). Semua inner layer dipaksa menjadi \`M125\` saat mencari ke tabel (\`Top/M125/Bottom\`). Untuk \`M125/M125/M125\` pada CB/F tidak tersedia (NULL).
+     * **Tahap 1 (Base Lookup):** Cari di \`base_price_table\` (acuan 125). Semua inner layer dipaksa menjadi \`M125\` saat mencari ke tabel (\`Top/M125/Bottom\`). Untuk \`M125/M125/M125\` pada CB/F adalah Rp 6.593.
      * **Tahap 2 (Virtual Base):** \`Virtual Base = Base Price + Nominal Upgrade\` (+Rp 300/layer untuk M135/M150 di posisi mana pun; +Rp 2.000/layer untuk Inner Layer K150/K200; +Rp 3.700/layer untuk Inner Layer K275).
      * **Tahap 3 (Total Additive Modifier):** \`Total Modifier = Margin (%) + Multiplier 275/EF (%) - Total Diskon Downgrade (%)\`.
        - Multiplier: Ada 275 (+2%), Flute E/F (+2%).

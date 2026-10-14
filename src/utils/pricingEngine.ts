@@ -39,7 +39,7 @@ export interface BasePriceRow {
   substance: string;
   'B/F': number;
   'C/F': number;
-  'CB/F': number | null; // M125/M125/M125 tidak ada harga CB/F (NULL) sesuai Blueprint
+  'CB/F': number | null; // M125/M125/M125 CB/F = Rp 6.593
   'E/F': number;
 }
 
@@ -48,7 +48,7 @@ export interface BasePriceRow {
  * Harga dalam Rupiah per Meter Persegi (M²). Harga berpusat pada varian ketebalan 125.
  */
 export const BASE_PRICE_TABLE: BasePriceRow[] = [
-  { no: 1, substance: 'M125/M125/M125', 'B/F': 3894, 'C/F': 3982, 'CB/F': null, 'E/F': 4075 },
+  { no: 1, substance: 'M125/M125/M125', 'B/F': 3894, 'C/F': 3982, 'CB/F': 6593, 'E/F': 4075 },
   { no: 2, substance: 'K125/M125/M125', 'B/F': 4009, 'C/F': 4098, 'CB/F': 6708, 'E/F': 4191 },
   { no: 3, substance: 'K125/M125/K125', 'B/F': 4125, 'C/F': 4214, 'CB/F': 6825, 'E/F': 4306 },
   { no: 4, substance: 'K150/M125/M125', 'B/F': 4210, 'C/F': 4299, 'CB/F': 6909, 'E/F': 4392 },
