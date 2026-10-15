@@ -20,6 +20,8 @@ interface CustomPopoverDropdownProps {
   warningNote?: string;
   align?: 'left' | 'right' | 'center';
   compact?: boolean;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
@@ -32,8 +34,20 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
   warningNote,
   align = 'left',
   compact = false,
+  isOpen: controlledIsOpen,
+  onOpenChange,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isControlled = controlledIsOpen !== undefined;
+  const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
+
+  const updateIsOpen = (nextVal: boolean) => {
+    if (!isControlled) {
+      setInternalIsOpen(nextVal);
+    }
+    onOpenChange?.(nextVal);
+  };
+
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -48,13 +62,13 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
         containerRef.current &&
         !containerRef.current.contains(e.target as Node)
       ) {
-        setIsOpen(false);
+        updateIsOpen(false);
       }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsOpen(false);
+        updateIsOpen(false);
       }
     };
 
@@ -83,7 +97,7 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
   };
 
   return (
-    <div ref={containerRef} className={`relative w-full min-w-0 ${isOpen ? 'z-40' : 'z-10'}`}>
+    <div ref={containerRef} className={`relative w-full min-w-0 ${isOpen ? 'z-50' : 'z-10'}`}>
       {/* Field Header */}
       <div className="flex items-baseline justify-between mb-1">
         <label
@@ -105,7 +119,7 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
         type="button"
         onClick={() => {
           triggerHaptic('light');
-          setIsOpen(!isOpen);
+          updateIsOpen(!isOpen);
         }}
         className={`w-full flex items-center justify-between ${
           compact
@@ -228,7 +242,7 @@ export const CustomPopoverDropdown: React.FC<CustomPopoverDropdownProps> = ({
                   onClick={() => {
                     triggerHaptic('medium');
                     onChange(item.id);
-                    setIsOpen(false);
+                    updateIsOpen(false);
                   }}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xs text-left transition-colors duration-150 cursor-pointer ${
                     isSelected

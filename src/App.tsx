@@ -276,6 +276,16 @@ export default function App() {
   const [marginStr, setMarginStr] = useState<string>('9.5');
   const [quoteTitle, setQuoteTitle] = useState<string>('');
 
+  // Active Layer Dropdown Tracker (Ensures popover elevates above sibling stacking contexts and closes peers)
+  const [openLayerDropdown, setOpenLayerDropdown] = useState<'top' | 'flute1' | 'mid' | 'flute2' | 'bot' | null>(null);
+
+  // Auto-close Flute 1 or Flute 2 if user switches away from CB/F
+  useEffect(() => {
+    if (flute !== 'CB/F' && (openLayerDropdown === 'flute1' || openLayerDropdown === 'flute2')) {
+      setOpenLayerDropdown(null);
+    }
+  }, [flute, openLayerDropdown]);
+
   // Screen width observer for responsive liquid animation direction (horizontal on desktop, vertical on mobile)
   const [isDesktop, setIsDesktop] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 640 : true
@@ -948,7 +958,7 @@ export default function App() {
                         transition={{
                           layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                         }}
-                        className="relative z-30 flex flex-col sm:flex-row items-stretch sm:items-start gap-2.5 sm:gap-2"
+                        className={`relative ${openLayerDropdown ? 'z-40' : 'z-30'} flex flex-col sm:flex-row items-stretch sm:items-start gap-2.5 sm:gap-2`}
                       >
                         {/* 1. TOP LAYER */}
                         <motion.div
@@ -957,8 +967,8 @@ export default function App() {
                           transition={{
                             layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                           }}
-                          style={{ willChange: 'transform', transform: 'translateZ(0)' }}
-                          className="flex-1 min-w-0"
+                          style={{ willChange: 'transform' }}
+                          className={`flex-1 min-w-0 ${openLayerDropdown === 'top' ? 'relative z-50' : 'relative z-10'}`}
                         >
                           <CustomPopoverDropdown
                             label="Top Layer"
@@ -966,6 +976,8 @@ export default function App() {
                             value={topLayer}
                             options={OUTER_LAYER_OPTIONS}
                             groups={['Medium', 'Kraft']}
+                            isOpen={openLayerDropdown === 'top'}
+                            onOpenChange={(open) => setOpenLayerDropdown(open ? 'top' : null)}
                             onChange={(val) => setTopLayer(val as OuterLayerMaterial)}
                           />
                         </motion.div>
@@ -992,6 +1004,7 @@ export default function App() {
                                       scale: 0.88,
                                       flex: 0,
                                       maxWidth: 0,
+                                      overflow: 'hidden',
                                       transition: {
                                         opacity: { duration: 0.16, ease: 'easeOut' },
                                         scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
@@ -1003,6 +1016,7 @@ export default function App() {
                                       opacity: 0,
                                       scale: 0.9,
                                       height: 0,
+                                      overflow: 'hidden',
                                       transition: {
                                         opacity: { duration: 0.16, ease: 'easeOut' },
                                         scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
@@ -1017,8 +1031,8 @@ export default function App() {
                                 maxWidth: { type: 'spring', stiffness: 280, damping: 26, mass: 0.8 },
                                 height: { duration: 0.26, ease: [0.16, 1, 0.3, 1] },
                               }}
-                              style={{ willChange: 'transform, opacity, max-width, height', transform: 'translateZ(0)' }}
-                              className="min-w-0 overflow-hidden"
+                              style={{ willChange: 'transform, opacity, max-width, height' }}
+                              className={`min-w-0 ${openLayerDropdown === 'flute1' ? 'relative z-50' : 'relative z-10'}`}
                             >
                               <div className="w-full">
                                 <CustomPopoverDropdown
@@ -1028,6 +1042,8 @@ export default function App() {
                                   options={MID_LAYER_OPTIONS}
                                   groups={['Medium', 'Kraft']}
                                   warningNote="Inner Layer: Tanpa K110, K125, K135."
+                                  isOpen={openLayerDropdown === 'flute1'}
+                                  onOpenChange={(open) => setOpenLayerDropdown(open ? 'flute1' : null)}
                                   onChange={(val) => setFlute1Layer(val as MidLayerMaterial)}
                                 />
                               </div>
@@ -1042,8 +1058,8 @@ export default function App() {
                           transition={{
                             layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                           }}
-                          style={{ willChange: 'transform', transform: 'translateZ(0)' }}
-                          className="flex-1 min-w-0"
+                          style={{ willChange: 'transform' }}
+                          className={`flex-1 min-w-0 ${openLayerDropdown === 'mid' ? 'relative z-50' : 'relative z-10'}`}
                         >
                           <CustomPopoverDropdown
                             label="Middle Layer"
@@ -1053,6 +1069,8 @@ export default function App() {
                             groups={['Medium', 'Kraft']}
                             align={flute === 'CB/F' ? 'center' : 'left'}
                             warningNote="Inner Layer: Tanpa K110, K125, K135."
+                            isOpen={openLayerDropdown === 'mid'}
+                            onOpenChange={(open) => setOpenLayerDropdown(open ? 'mid' : null)}
                             onChange={(val) => setMidLayer(val as MidLayerMaterial)}
                           />
                         </motion.div>
@@ -1079,6 +1097,7 @@ export default function App() {
                                       scale: 0.88,
                                       flex: 0,
                                       maxWidth: 0,
+                                      overflow: 'hidden',
                                       transition: {
                                         opacity: { duration: 0.16, ease: 'easeOut' },
                                         scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
@@ -1090,6 +1109,7 @@ export default function App() {
                                       opacity: 0,
                                       scale: 0.9,
                                       height: 0,
+                                      overflow: 'hidden',
                                       transition: {
                                         opacity: { duration: 0.16, ease: 'easeOut' },
                                         scale: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
@@ -1104,8 +1124,8 @@ export default function App() {
                                 maxWidth: { type: 'spring', stiffness: 280, damping: 26, mass: 0.8 },
                                 height: { duration: 0.26, ease: [0.16, 1, 0.3, 1] },
                               }}
-                              style={{ willChange: 'transform, opacity, max-width, height', transform: 'translateZ(0)' }}
-                              className="min-w-0 overflow-hidden"
+                              style={{ willChange: 'transform, opacity, max-width, height' }}
+                              className={`min-w-0 ${openLayerDropdown === 'flute2' ? 'relative z-50' : 'relative z-10'}`}
                             >
                               <div className="w-full">
                                 <CustomPopoverDropdown
@@ -1116,6 +1136,8 @@ export default function App() {
                                   groups={['Medium', 'Kraft']}
                                   align="right"
                                   warningNote="Inner Layer: Tanpa K110, K125, K135."
+                                  isOpen={openLayerDropdown === 'flute2'}
+                                  onOpenChange={(open) => setOpenLayerDropdown(open ? 'flute2' : null)}
                                   onChange={(val) => setFlute2Layer(val as MidLayerMaterial)}
                                 />
                               </div>
@@ -1130,8 +1152,8 @@ export default function App() {
                           transition={{
                             layout: { type: 'spring', stiffness: 260, damping: 26, mass: 0.8 },
                           }}
-                          style={{ willChange: 'transform', transform: 'translateZ(0)' }}
-                          className="flex-1 min-w-0"
+                          style={{ willChange: 'transform' }}
+                          className={`flex-1 min-w-0 ${openLayerDropdown === 'bot' ? 'relative z-50' : 'relative z-10'}`}
                         >
                           <CustomPopoverDropdown
                             label="Bottom Layer"
@@ -1140,6 +1162,8 @@ export default function App() {
                             options={OUTER_LAYER_OPTIONS}
                             groups={['Medium', 'Kraft']}
                             align="right"
+                            isOpen={openLayerDropdown === 'bot'}
+                            onOpenChange={(open) => setOpenLayerDropdown(open ? 'bot' : null)}
                             onChange={(val) => setBotLayer(val as OuterLayerMaterial)}
                           />
                         </motion.div>
