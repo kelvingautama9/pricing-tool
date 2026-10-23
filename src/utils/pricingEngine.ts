@@ -107,10 +107,10 @@ export const FLUTE_OPTIONS: Array<{
   tag: string;
   supported: boolean;
 }> = [
-  { id: 'B/F', name: 'B/F', tag: 'SW', supported: true },
-  { id: 'C/F', name: 'C/F', tag: 'SW', supported: true },
+  { id: 'B/F', name: 'B/F', tag: '', supported: true },
+  { id: 'C/F', name: 'C/F', tag: '', supported: true },
   { id: 'E/F', name: 'E/F', tag: '+2%', supported: true },
-  { id: 'CB/F', name: 'CB/F', tag: 'DW', supported: true },
+  { id: 'CB/F', name: 'CB/F', tag: '', supported: true },
 ];
 
 export type CustomerTier = 'Tier 1' | 'Tier 2' | 'Tier 3' | 'Tier 4';
@@ -989,14 +989,14 @@ export function calculateCartonPricing(input: PricingInput): PricingCalculationR
     if (has275) {
       rawTriggers.push({
         code: '275_MATERIAL',
-        label: 'Kombinasi mengandung bahan 275 gsm (+2%)',
+        label: 'Bahan 275 gsm (+2%)',
         percent: 2.0,
       });
     }
     if (isEfFlute) {
       rawTriggers.push({
         code: 'EF_FLUTE',
-        label: 'Jenis gelombang E-Flute / E/F (+2%)',
+        label: 'E-Flute / E/F (+2%)',
         percent: 2.0,
       });
     }

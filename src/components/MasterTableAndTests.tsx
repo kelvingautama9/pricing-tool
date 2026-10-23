@@ -222,19 +222,15 @@ export const MasterTableAndTests: React.FC<MasterTableAndTestsProps> = ({
                   </th>
                   <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-right whitespace-nowrap">
                     B/F
-                    <span className="hidden md:inline text-[8.5px] font-normal text-neutral-400 ml-0.5">(SW)</span>
                   </th>
                   <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-right whitespace-nowrap">
                     C/F
-                    <span className="hidden md:inline text-[8.5px] font-normal text-neutral-400 ml-0.5">(SW)</span>
                   </th>
                   <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-right whitespace-nowrap">
                     CB/F
-                    <span className="hidden md:inline text-[8.5px] font-normal text-neutral-400 ml-0.5">(DW)</span>
                   </th>
                   <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-right whitespace-nowrap">
                     E/F
-                    <span className="hidden md:inline text-[8.5px] font-normal text-neutral-400 ml-0.5">(SW)</span>
                   </th>
                   <th className="py-2 sm:py-2.5 px-2 sm:px-3 text-right whitespace-nowrap">
                     Aksi

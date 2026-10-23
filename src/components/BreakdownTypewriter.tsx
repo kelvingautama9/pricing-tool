@@ -138,7 +138,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
       <div className="flex items-center justify-between pb-2 border-b border-black/6 dark:border-white/8 text-[11px]">
         <div className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 font-medium shrink-0">
           <Calculator className="w-3.5 h-3.5 text-[#C65D3B]" />
-          <span>Audit & Alur Kalkulasi Rumus</span>
+          <span>Rumus</span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -184,7 +184,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
               Step 1
             </span>
             <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
-              Harga Dasar Master Table
+              Harga Dasar
             </span>
           </div>
           <div className="font-mono font-bold text-xs text-[#1C1B1A] dark:text-[#F2EFE9] tabular-nums shrink-0 whitespace-nowrap text-right">
@@ -196,7 +196,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10.5px] font-mono pt-1 border-t border-black/4 dark:border-white/6 text-neutral-600 dark:text-neutral-400">
           <div className="p-1.5 rounded-xs bg-white dark:bg-[#141210] border border-black/4 dark:border-white/6">
             <span className="text-neutral-400 block text-[9px] uppercase tracking-wide">
-              Acuan Master
+              Acuan
             </span>
             <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] block truncate">
               {result.mappedReferenceSubstance}
@@ -204,7 +204,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
           </div>
           <div className="p-1.5 rounded-xs bg-white dark:bg-[#141210] border border-black/4 dark:border-white/6">
             <span className="text-neutral-400 block text-[9px] uppercase tracking-wide">
-              Tipe Flute
+              Flute
             </span>
             <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] block truncate">
               {result.input.flute} · {result.isDoubleWall ? 'Double Wall (5L)' : 'Single Wall (3L)'}
@@ -277,7 +277,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
               Step 3
             </span>
             <span className="font-semibold text-neutral-800 dark:text-neutral-200 text-xs">
-              Sistem Modifier Additive (%)
+              Modifier (%)
             </span>
           </div>
           <div
@@ -293,7 +293,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
         <div className="grid grid-cols-3 gap-1.5 text-[10.5px] font-mono pt-1 border-t border-black/4 dark:border-white/6">
           <div className="p-1.5 rounded-xs bg-white dark:bg-[#141210] border border-black/4 dark:border-white/6">
             <span className="text-neutral-400 block text-[9px] uppercase tracking-wide">
-              Margin / Diskon
+              Diskon
             </span>
             <span
               className={`block tabular-nums whitespace-nowrap ${getPercentColorClass(
@@ -353,7 +353,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
             <div className="flex items-center justify-between text-red-700 dark:text-red-400 font-bold">
               <span>Diskon Downgrade : −{result.totalDowngradePercent}%</span>
               <span className="text-[9px] text-neutral-400 font-normal">
-                {result.isDoubleWall ? 'Double Wall (DW)' : 'Single Wall (SW)'}
+                {result.isDoubleWall ? 'Double Wall' : 'Single Wall'}
               </span>
             </div>
             <div className="space-y-0.5 text-neutral-600 dark:text-neutral-300">
@@ -453,7 +453,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
           {/* Row 1: The Multiplication Formula */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10.5px]">
             <span className="text-neutral-500 text-[10px] shrink-0 whitespace-nowrap">
-              Rumus Matematika:
+              Rumus:
             </span>
             <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] whitespace-nowrap tabular-nums self-end sm:self-auto">
               {formatRupiah(result.virtualBase)} × (1 {result.totalAdditiveModifierDecimal >= 0 ? '+' : '−'} {Math.abs(result.totalAdditiveModifierDecimal).toFixed(4)})
@@ -463,7 +463,7 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
           {/* Row 2: Decimal Raw Value & Rounded Net Target */}
           <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-black/4 dark:border-white/6 text-[10px]">
             <div className="flex items-center gap-1.5 text-neutral-500 whitespace-nowrap">
-              <span>Nilai Desimal:</span>
+              <span>Desimal:</span>
               <span className="font-semibold text-[#1C1B1A] dark:text-[#F2EFE9] tabular-nums">
                 Rp {result.hargaFinalMentah.toFixed(2)}
               </span>
@@ -520,9 +520,6 @@ export const BreakdownTypewriter: React.FC<BreakdownTypewriterProps> = ({
                 </span>
                 <span className="font-bold text-[#1C1B1A] dark:text-[#F2EFE9] text-xs block tabular-nums whitespace-nowrap">
                   {result.moqResult.roundedMoq.toLocaleString('id-ID')} pcs
-                </span>
-                <span className="block text-[9.5px] text-neutral-400 mt-0.5 whitespace-nowrap">
-                  Acuan Min. 500 Meter Lari
                 </span>
               </div>
             )}

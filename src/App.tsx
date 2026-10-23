@@ -934,6 +934,25 @@ export default function App() {
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
+                            disabled={!calculationResult.success}
+                            onClick={handleSaveToHistory}
+                            title="Simpan kalkulasi ke Riwayat"
+                            className="flex items-center gap-1 px-2 py-1 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[11px] font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap text-[#1C1B1A] dark:text-[#F2EFE9] disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {savedNotice ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span className="text-emerald-600 font-semibold">Tersimpan</span>
+                              </>
+                            ) : (
+                              <>
+                                <Save className="w-3 h-3 text-[#C65D3B] shrink-0" />
+                                <span>Simpan</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
                             onClick={handleSwapTopBottom}
                             title="Tukar Top & Bottom Layer"
                             className="flex items-center gap-1 px-2 py-1 rounded-xs bg-[#F3F1ED] dark:bg-[#22201E] hover:bg-black/8 dark:hover:bg-white/8 text-[11px] font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap"
@@ -1329,41 +1348,6 @@ export default function App() {
                           })}
                         </div>
                       </div>
-
-                      {/* Save Label & Save to Sidebar Button (Light grey placeholder) */}
-                      <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                        <input
-                          type="text"
-                          value={quoteTitle}
-                          onChange={(e) => setQuoteTitle(e.target.value)}
-                          placeholder="Catatan / nama customer (opsional)..."
-                          className="flex-1 px-3 py-2 rounded-md bg-[#F3F1ED] dark:bg-[#22201E] border border-black/6 dark:border-white/8 text-xs text-[#1C1B1A] dark:text-[#F2EFE9] placeholder:text-neutral-300 dark:placeholder:text-neutral-600 focus:outline-1 focus:outline-[#C65D3B]"
-                        />
-                        <button
-                          type="button"
-                          disabled={!calculationResult.success}
-                          onClick={handleSaveToHistory}
-                          className={`flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-semibold transition-all duration-150 active:scale-[0.98] cursor-pointer shrink-0 ${
-                            !calculationResult.success
-                              ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
-                              : savedNotice
-                              ? 'bg-emerald-700 text-white'
-                              : 'bg-[#1C1B1A] dark:bg-[#F2EFE9] text-white dark:text-[#1C1B1A] hover:opacity-90'
-                          }`}
-                        >
-                          {savedNotice ? (
-                            <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Tersimpan</span>
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-3.5 h-3.5" />
-                              <span>Simpan</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
                     </div>
 
                     {/* Card 2: Sheet Dimension, MOQ & Quantity Calculator */}
@@ -1631,11 +1615,6 @@ export default function App() {
                                 value={`Rp ${calculationResult.hargaFinalMentah.toFixed(2)}`}
                               />
                             </div>
-                          </div>
-
-                          {/* Small Light-Grey Subtext as requested */}
-                          <div className="mt-1.5 text-[10px] text-neutral-400 dark:text-neutral-500 leading-normal">
-                            Pembulatan Desimal 5 dibulatkan ke atas (exc PPN)
                           </div>
                         </div>
 
