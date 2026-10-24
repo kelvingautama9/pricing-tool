@@ -589,6 +589,10 @@ export const BatchCalculator: React.FC<BatchCalculatorProps> = ({
                   <th className="py-2.5 px-2 min-w-[80px] border-r border-black/6 dark:border-white/6 text-center">
                     MOQ
                   </th>
+                  {/* Highlight Column: Harga/Pcs moved right beside MOQ */}
+                  <th className="py-2.5 px-3 min-w-[125px] border-r border-black/6 dark:border-white/6 text-right bg-[#C65D3B]/10 dark:bg-[#C65D3B]/20 font-bold text-[#C65D3B]">
+                    HARGA / PCS
+                  </th>
                   <th className="py-2.5 px-2 min-w-[80px] border-r border-black/6 dark:border-white/6 text-right">
                     Luas (M²)
                   </th>
@@ -597,10 +601,6 @@ export const BatchCalculator: React.FC<BatchCalculatorProps> = ({
                   </th>
                   <th className="py-2.5 px-2 min-w-[95px] border-r border-black/6 dark:border-white/6 text-right">
                     Harga / M²
-                  </th>
-                  {/* Highlight Column: Harga/Pcs */}
-                  <th className="py-2.5 px-3 min-w-[125px] border-r border-black/6 dark:border-white/6 text-right bg-[#C65D3B]/10 dark:bg-[#C65D3B]/20 font-bold text-[#C65D3B]">
-                    HARGA / PCS
                   </th>
                   <th className="py-2.5 px-2 min-w-[90px] border-r border-black/6 dark:border-white/6 text-right">
                     Berat / Pcs
@@ -801,6 +801,15 @@ export const BatchCalculator: React.FC<BatchCalculatorProps> = ({
                           : '-'}
                       </td>
 
+                      {/* HARGA / PCS (PROMINENT HIGHLIGHT - disamping MOQ) */}
+                      <td className="py-2 px-3 text-right border-r border-black/6 dark:border-white/6 bg-[#C65D3B]/8 dark:bg-[#C65D3B]/15">
+                        <span className="text-xs sm:text-sm font-extrabold text-[#C65D3B] tracking-tight">
+                          {result.hargaPerSheetRp !== undefined
+                            ? formatRupiah(result.hargaPerSheetRp)
+                            : '-'}
+                        </span>
+                      </td>
+
                       {/* Area (M²) */}
                       <td className="py-2 px-2 text-right border-r border-black/6 dark:border-white/6 font-semibold text-neutral-700 dark:text-neutral-300">
                         {result.areaPerSheetM2 ? result.areaPerSheetM2.toFixed(5) : '-'}
@@ -817,15 +826,6 @@ export const BatchCalculator: React.FC<BatchCalculatorProps> = ({
                       {/* Harga / M² */}
                       <td className="py-2 px-2 text-right border-r border-black/6 dark:border-white/6 font-medium text-neutral-800 dark:text-neutral-200">
                         {formatRupiah(result.hargaBersihPerM2)}
-                      </td>
-
-                      {/* HARGA / PCS (PROMINENT HIGHLIGHT) */}
-                      <td className="py-2 px-3 text-right border-r border-black/6 dark:border-white/6 bg-[#C65D3B]/8 dark:bg-[#C65D3B]/15">
-                        <span className="text-xs sm:text-sm font-extrabold text-[#C65D3B] tracking-tight">
-                          {result.hargaPerSheetRp !== undefined
-                            ? formatRupiah(result.hargaPerSheetRp)
-                            : '-'}
-                        </span>
                       </td>
 
                       {/* Berat / Pcs */}
